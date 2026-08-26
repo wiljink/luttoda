@@ -12,9 +12,47 @@
 </div>
 
 <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 max-w-3xl">
-    <form action="{{ route('members.update', $member) }}" method="POST" class="space-y-6">
+    <form action="{{ route('members.update', $member) }}" method="POST" enctype="multipart/form-data" class="space-y-6">
         @csrf
         @method('PUT')
+
+        <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Photo</label>
+            <div class="flex items-center space-x-4">
+                @if ($member->photo_url)
+                    <img id="photo-preview" src="{{ $member->photo_url }}" alt="{{ $member->full_name }}" class="w-20 h-20 rounded-full object-cover border border-gray-200">
+                    <div id="photo-preview-empty" class="w-20 h-20 rounded-full bg-gray-100 border border-gray-200 hidden items-center justify-center text-gray-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-9 h-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
+                    </div>
+                @else
+                    <div id="photo-preview-empty" class="w-20 h-20 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-9 h-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
+                    </div>
+                    <img id="photo-preview" src="" alt="Photo preview" class="w-20 h-20 rounded-full object-cover border border-gray-200 hidden">
+                @endif
+                <div>
+                    <input type="file" name="photo" accept="image/*" onchange="
+                        const f = this.files[0];
+                        const img = document.getElementById('photo-preview');
+                        const empty = document.getElementById('photo-preview-empty');
+                        if (f) { img.src = URL.createObjectURL(f); img.classList.remove('hidden'); empty.classList.add('hidden'); document.getElementById('remove_photo').checked = false; }
+                    " class="text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded file:border-0 file:bg-blue-50 file:text-blue-700 file:font-semibold hover:file:bg-blue-100">
+                    @if ($member->photo_url)
+                        <label class="flex items-center mt-2 text-xs text-gray-500">
+                            <input type="checkbox" id="remove_photo" name="remove_photo" value="1" class="mr-1.5 rounded border-gray-300" onchange="
+                                const img = document.getElementById('photo-preview');
+                                const empty = document.getElementById('photo-preview-empty');
+                                if (this.checked) { img.classList.add('hidden'); empty.classList.remove('hidden'); }
+                                else { img.classList.remove('hidden'); empty.classList.add('hidden'); }
+                            ">
+                            Remove current photo
+                        </label>
+                    @endif
+                </div>
+            </div>
+            @error('photo')<p class="text-xs text-red-600 mt-1">{{ $message }}</p>@enderror
+            <p class="text-xs text-gray-400 mt-1">JPG or PNG, up to 2MB.</p>
+        </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>

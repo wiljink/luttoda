@@ -13,23 +13,90 @@
             <div class="text-white flex items-center space-x-2 px-4">
                 <span class="text-2xl font-extrabold tracking-wider">LUTTODA</span>
             </div>
-            <nav class="space-y-1">
-                <a href="{{ route('dashboard') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('dashboard') ? 'bg-slate-900 font-semibold' : '' }}">Dashboard</a>
-                <a href="{{ route('members.index') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('members.*') ? 'bg-slate-900 font-semibold' : '' }}">Members</a>
-                <a href="{{ route('daily-dues.index') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('daily-dues.*') ? 'bg-slate-900 font-semibold' : '' }}">Daily Dues</a>
-                <a href="{{ route('fuel.index') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('fuel.*') ? 'bg-slate-900 font-semibold' : '' }}">Fuel Consumption</a>
-                <a href="{{ route('loans.index') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('loans.*') ? 'bg-slate-900 font-semibold' : '' }}">Loans</a>
-                <a href="{{ route('benefits.index') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('benefits.*') ? 'bg-slate-900 font-semibold' : '' }}">Benefits</a>
-                <a href="{{ route('income-expenses.index') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('income-expenses.*') ? 'bg-slate-900 font-semibold' : '' }}">Income & Expenses</a>
+          <nav class="space-y-1">
+                @role('admin')
+                    <a href="{{ route('dashboard') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('dashboard') ? 'bg-slate-900 font-semibold' : '' }}">Dashboard</a>
+                    <a href="{{ route('members.index') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('members.*') ? 'bg-slate-900 font-semibold' : '' }}">Members</a>
+                    <a href="{{ route('daily-dues.index') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('daily-dues.*') ? 'bg-slate-900 font-semibold' : '' }}">Daily Dues</a>
+                    <a href="{{ route('fuel.index') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('fuel.*') ? 'bg-slate-900 font-semibold' : '' }}">Fuel Consumption</a>
+                    <a href="{{ route('loans.index') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('loans.*') ? 'bg-slate-900 font-semibold' : '' }}">Loans</a>
+                    <a href="{{ route('benefits.index') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('benefits.*') ? 'bg-slate-900 font-semibold' : '' }}">Benefits</a>
+                    <a href="{{ route('income-expenses.index') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('income-expenses.*') ? 'bg-slate-900 font-semibold' : '' }}">Income & Expenses</a>
 
-                <div class="pt-4 border-t border-slate-700 text-xs px-4 text-slate-400 uppercase tracking-wider">Reports</div>
-                <a href="{{ route('reports.daily') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.daily') ? 'bg-slate-900 font-semibold' : '' }}">Daily</a>
-                <a href="{{ route('reports.monthly') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.monthly') ? 'bg-slate-900 font-semibold' : '' }}">Monthly</a>
-                <a href="{{ route('reports.fuel') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.fuel') ? 'bg-slate-900 font-semibold' : '' }}">Fuel Consumption</a>
+                    <div class="pt-4 border-t border-slate-700 text-xs px-4 text-slate-400 uppercase tracking-wider">Reports</div>
 
-                  <div class="pt-4 border-t border-slate-700 text-xs px-4 text-slate-400 uppercase tracking-wider">Settings</div>
-                <a href="{{ route('tickets.index') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('dashboard') ? 'bg-slate-900 font-semibold' : '' }}">Tickets</a>
+                    {{-- Operational reports: snapshot/summary for a given period --}}
+                    <a href="{{ route('reports.daily') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.daily') ? 'bg-slate-900 font-semibold' : '' }}">Daily</a>
+                    <a href="{{ route('reports.monthly') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.monthly') ? 'bg-slate-900 font-semibold' : '' }}">Monthly</a>
+                    <a href="{{ route('reports.fuel') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.fuel') ? 'bg-slate-900 font-semibold' : '' }}">Fuel Consumption</a>
 
+                    {{-- Ledger reports: per-account / per-member money tracking, grouped in a collapsible submenu --}}
+                    @php
+                        $ledgerActive = request()->routeIs('reports.ledger.search')
+                            || request()->routeIs('reports.member')
+                            || request()->routeIs('reports.member.export')
+                            || request()->routeIs('reports.rebate-pool.page')
+                            || request()->routeIs('reports.association-fund.page')
+                            || request()->routeIs('reports.coop-deposit.page');
+                    @endphp
+                    <div x-data="{ open: {{ $ledgerActive ? 'true' : 'false' }} }">
+                        <button type="button" @click="open = !open"
+                                class="w-full flex items-center justify-between py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ $ledgerActive ? 'bg-slate-900 font-semibold' : '' }}">
+                            <span>Ledger Reports</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-200" :class="{ 'rotate-90': open }" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                            </svg>
+                        </button>
+                        <div x-show="open" x-collapse class="pl-4 border-l border-slate-700 ml-4 mt-1 space-y-1">
+                            <a href="{{ route('reports.ledger.search') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.ledger.search') || request()->routeIs('reports.member') || request()->routeIs('reports.member.export') ? 'bg-slate-900 font-semibold' : '' }}">Savings Ledger</a>
+                            <a href="{{ route('reports.rebate-pool.page') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.rebate-pool.page') ? 'bg-slate-900 font-semibold' : '' }}">Rebate Pool</a>
+                            <a href="{{ route('reports.association-fund.page') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.association-fund.page') ? 'bg-slate-900 font-semibold' : '' }}">Association Fund</a>
+                            <a href="{{ route('reports.coop-deposit.page') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.coop-deposit.page') ? 'bg-slate-900 font-semibold' : '' }}">Coop Deposit</a>
+                        </div>
+                    </div>
+
+                    <div class="pt-4 border-t border-slate-700 text-xs px-4 text-slate-400 uppercase tracking-wider">Settings</div>
+                    <a href="{{ route('users.index') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('users.*') ? 'bg-slate-900 font-semibold' : '' }}">Users</a>
+                    <a href="{{ route('tickets.index') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('tickets.*') ? 'bg-slate-900 font-semibold' : '' }}">Tickets</a>
+                @endrole
+
+                @role('collector')
+                    <a href="{{ route('daily-dues.index') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('daily-dues.*') ? 'bg-slate-900 font-semibold' : '' }}">Daily Dues</a>
+                    <a href="{{ route('fuel.index') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('fuel.*') ? 'bg-slate-900 font-semibold' : '' }}">Fuel Consumption</a>
+                @endrole
+
+                @role('accounting')
+                    <div class="pt-4 text-xs px-4 text-slate-400 uppercase tracking-wider">Reports</div>
+
+                    <a href="{{ route('reports.daily') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.daily') ? 'bg-slate-900 font-semibold' : '' }}">Daily</a>
+                    <a href="{{ route('reports.monthly') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.monthly') ? 'bg-slate-900 font-semibold' : '' }}">Monthly</a>
+                    <a href="{{ route('reports.fuel') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.fuel') ? 'bg-slate-900 font-semibold' : '' }}">Fuel Consumption</a>
+
+                    @php
+                        $ledgerActiveAcct = request()->routeIs('reports.ledger.search')
+                            || request()->routeIs('reports.member')
+                            || request()->routeIs('reports.member.export')
+                            || request()->routeIs('reports.rebate-pool.page')
+                            || request()->routeIs('reports.association-fund.page')
+                            || request()->routeIs('reports.coop-deposit.page');
+                    @endphp
+                    <div x-data="{ open: {{ $ledgerActiveAcct ? 'true' : 'false' }} }">
+                        <button type="button" @click="open = !open"
+                                class="w-full flex items-center justify-between py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ $ledgerActiveAcct ? 'bg-slate-900 font-semibold' : '' }}">
+                            <span>Ledger Reports</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-200" :class="{ 'rotate-90': open }" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                            </svg>
+                        </button>
+                        <div x-show="open" x-collapse class="pl-4 border-l border-slate-700 ml-4 mt-1 space-y-1">
+                            <a href="{{ route('reports.ledger.search') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.ledger.search') || request()->routeIs('reports.member') || request()->routeIs('reports.member.export') ? 'bg-slate-900 font-semibold' : '' }}">Savings Ledger</a>
+                            <a href="{{ route('reports.rebate-pool.page') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.rebate-pool.page') ? 'bg-slate-900 font-semibold' : '' }}">Rebate Pool</a>
+                            <a href="{{ route('reports.association-fund.page') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.association-fund.page') ? 'bg-slate-900 font-semibold' : '' }}">Association Fund</a>
+                            <a href="{{ route('reports.coop-deposit.page') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.coop-deposit.page') ? 'bg-slate-900 font-semibold' : '' }}">Coop Deposit</a>
+                        </div>
+                    </div>
+                @endrole
+            </nav>
         </div>
 
         <!-- Main Content Area -->
@@ -79,5 +146,9 @@
             @yield('content')
         </div>
     </div>
+
+    <!-- Alpine.js: powers the collapsible "Ledger Reports" submenu -->
+    <script src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </body>
 </html>

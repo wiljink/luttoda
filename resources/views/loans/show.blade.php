@@ -93,7 +93,7 @@
     <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 max-w-2xl mb-6">
         <h2 class="text-lg font-semibold text-gray-800 mb-4">Record Payment</h2>
         @if ($loan->status !== 'paid')
-            <form action="{{ route('loans.payments.store', $loan) }}" method="POST" class="flex items-end gap-4">
+            <form action="{{ route('loans.payment', $loan) }}" method="POST" class="flex items-end gap-4">
                 @csrf
                 <div class="flex-1">
                     <label class="block text-sm font-semibold text-gray-700 mb-1">Payment Amount (₱) *</label>

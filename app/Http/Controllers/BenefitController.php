@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Benefit;
 use App\Models\Member;
+use App\Services\SavingsLedgerService;
 use Illuminate\Http\Request;
 
 class BenefitController extends Controller
@@ -78,7 +79,18 @@ class BenefitController extends Controller
         $benefit->update(['status' => 'released']);
 
         if ($benefit->benefit_type === 'sss') {
-            $benefit->member->increment('savings_balance', $benefit->amount);
+            // SSS benefit is a savings-type benefit -- release it through
+            // the ledger so it shows up in the member's savings history
+            // instead of just silently bumping the cached balance.
+            app(SavingsLedgerService::class)->record(
+                member: $benefit->member,
+                date: today()->toDateString(),
+                sourceType: 'benefit_release',
+                txnType: 'deposit',
+                amount: $benefit->amount,
+                sourceable: $benefit,
+                remarks: "SSS benefit released - claim #{$benefit->id}",
+            );
         }
 
         return back()->with('success', 'Benefit na-release na.');

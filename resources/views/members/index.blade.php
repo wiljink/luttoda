@@ -60,10 +60,21 @@
                 <tr>
                     <td class="p-3 font-mono font-bold text-gray-700">{{ $member->member_no }}</td>
                     <td class="p-3">
-                        <a href="{{ route('members.show', $member->id) }}" class="text-blue-600 font-semibold hover:underline">
-                            {{ $member->full_name }}
-                        </a>
-                        <span class="block text-xs text-gray-400">Operator: {{ $member->operator_name }}</span>
+                        <div class="flex items-center space-x-3">
+                            @if ($member->photo_url)
+                                <img src="{{ $member->photo_url }}" alt="{{ $member->full_name }}" class="w-8 h-8 rounded-full object-cover border border-gray-200 flex-shrink-0">
+                            @else
+                                <div class="w-8 h-8 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400 flex-shrink-0">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
+                                </div>
+                            @endif
+                            <div>
+                                <a href="{{ route('members.show', $member->id) }}" class="text-blue-600 font-semibold hover:underline">
+                                    {{ $member->full_name }}
+                                </a>
+                                <span class="block text-xs text-gray-400">Operator: {{ $member->operator_name }}</span>
+                            </div>
+                        </div>
                     </td>
                     <td class="p-3 font-semibold">{{ $member->plate_number }}</td>
                     <td class="p-3"><span class="px-2 py-0.5 text-xs rounded bg-slate-100">{{ $member->route }}</span></td>
@@ -74,6 +85,7 @@
                         </span>
                     </td>
                     <td class="p-3 text-center space-x-2">
+                        <a href="{{ route('reports.member', $member->id) }}" class="text-slate-700 hover:text-slate-900 font-medium">Ledger</a>
                         <a href="{{ route('members.edit', $member->id) }}" class="text-amber-600 hover:text-amber-800 font-medium">Edit</a>
                         <form action="{{ route('members.destroy', $member->id) }}" method="POST" class="inline-block" onsubmit="return confirm('Are you sure you want to soft-delete this member?')">
                             @csrf

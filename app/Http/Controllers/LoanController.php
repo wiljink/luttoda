@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Loan;
 use App\Models\LoanPayment;
 use App\Models\Member;
+use App\Services\SavingsLedgerService;
 use Illuminate\Http\Request;
 
 class LoanController extends Controller
@@ -55,8 +56,8 @@ class LoanController extends Controller
     {
         $member = $loan->member;
 
-        // Basic guard: member must have sufficient savings (e.g. 10% minimum)
-        if ($member->savings_balance < $loan->amount * 0.10) {
+        // Basic guard: member must have sufficient savings (e.g. 2% minimum)
+        if ($member->savings_balance < $loan->amount * 0.02) {
             return back()->withErrors([
                 'loan' => 'Member savings are insufficient to qualify.',
             ]);
@@ -86,7 +87,7 @@ class LoanController extends Controller
             'amount' => 'required|numeric|min:1',
         ]);
 
-        LoanPayment::create([
+        $payment = LoanPayment::create([
             'loan_id' => $loan->id,
             'payment_date' => now(),
             'amount' => $validated['amount'],
@@ -100,6 +101,32 @@ class LoanController extends Controller
         } elseif ($loan->status === 'approved') {
             $loan->update(['status' => 'active']);
         }
+
+        // ASSUMPTION -- UNCONFIRMED: this writes a 'loan_deduction'
+        // withdrawal to the savings ledger, treating loan payments as if
+        // they come OUT of the member's savings balance.
+        //
+        // But approve() only checks savings_balance as a collateral/
+        // eligibility gate (>= 2% of loan amount) -- it never actually
+        // reserves or touches that money. A loan payment here looks like a
+        // cash payment collected FROM the member (received_by => collector),
+        // which has nothing to do with their savings balance.
+        //
+        // If that reading is correct, DELETE the block below entirely --
+        // loan payments should not touch savings_ledger at all.
+        //
+        // Keep this block only if loan repayments are actually meant to be
+        // auto-deducted from savings (e.g. a payroll/dues-deduction style
+        // arrangement instead of cash-in-hand).
+        app(SavingsLedgerService::class)->record(
+            member: $loan->member,
+            date: $payment->payment_date,
+            sourceType: 'loan_deduction',
+            txnType: 'withdrawal',
+            amount: $payment->amount,
+            sourceable: $payment,
+            remarks: "Loan payment - Loan #{$loan->id}",
+        );
 
         return back()->with('success', 'Payment recorded.');
     }

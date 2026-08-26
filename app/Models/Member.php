@@ -12,7 +12,7 @@ class Member extends Model
 
     protected $fillable = [
         'member_no', 'firstname', 'lastname', 'middlename', 'plate_number',
-        'operator_name', 'route', 'contact_number', 'address',
+        'operator_name', 'route', 'contact_number', 'address', 'photo_path',
         'date_joined', 'status', 'savings_balance',
     ];
 
@@ -25,6 +25,13 @@ class Member extends Model
     {
         $middle = $this->middlename ? " {$this->middlename} " : ' ';
         return "{$this->firstname}{$middle}{$this->lastname}";
+    }
+
+    public function getPhotoUrlAttribute()
+    {
+        return $this->photo_path
+            ? \Illuminate\Support\Facades\Storage::disk('public')->url($this->photo_path)
+            : null;
     }
 
     public function dailyDues()
@@ -65,4 +72,9 @@ class Member extends Model
     {
     return $this->hasMany(Violation::class);
     }
+    public function savingsLedgers()
+    {
+    return $this->hasMany(SavingsLedger::class, 'member_id');
+    }
+
 }

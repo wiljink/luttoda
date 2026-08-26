@@ -41,7 +41,7 @@ class IncomeExpenseController extends Controller
         ]));
 
         return redirect()->route('income-expenses.index')
-            ->with('success', 'Narekord ang transaksyon.');
+            ->with('success', 'Transaction recorded.');
     }
 
     public function show(IncomeExpense $incomeExpense)
@@ -65,12 +65,12 @@ class IncomeExpenseController extends Controller
 
         $incomeExpense->update($validated);
 
-        return redirect()->route('income-expenses.index')->with('success', 'Na-update.');
+        return redirect()->route('income-expenses.index')->with('success', 'Updated successfully.');
     }
 
     public function destroy(IncomeExpense $incomeExpense)
     {
         $incomeExpense->delete();
-        return redirect()->route('income-expenses.index')->with('success', 'Natangtang.');
+        return redirect()->route('income-expenses.index')->with('success', 'Deleted successfully.');
     }
 }

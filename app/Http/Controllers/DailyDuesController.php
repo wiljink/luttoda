@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\DailyDue;
 use App\Models\Member;
 use App\Models\Ticket;
+use App\Services\SavingsLedgerService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -16,6 +17,12 @@ class DailyDuesController extends Controller
      * with what the form shows.
      */
     private const PRICE_PER_TICKET = 50.00;
+
+    // Split of PRICE_PER_TICKET, per the LUTTODA dues structure:
+    // ₱50 -> ₱35 savings + ₱7.50 rebate pool + ₱7.50 association fund
+    private const SAVINGS_SHARE_PER_TICKET = 35.00;
+    private const REBATE_SHARE_PER_TICKET = 7.50;
+    private const ASSOCIATION_SHARE_PER_TICKET = 7.50;
 
     public function index(Request $request)
     {
@@ -115,6 +122,12 @@ class DailyDuesController extends Controller
                     'route' => $validated['route'],
                     'remarks' => $validated['remarks'] ?? null,
                     'amount_paid' => $totalAmount,
+                    // NEW: split computation. Report queries (ReportController@daily,
+                    // and the SQL "Daily Collection Report") assume these columns
+                    // exist and are populated -- they were not being set before.
+                    'savings_share' => self::SAVINGS_SHARE_PER_TICKET * $quantity,
+                    'rebate_share' => self::REBATE_SHARE_PER_TICKET * $quantity,
+                    'association_share' => self::ASSOCIATION_SHARE_PER_TICKET * $quantity,
                     'ticket_quantity' => $quantity,
                     'collected_by' => auth()->id(),
                 ]);
@@ -132,6 +145,25 @@ class DailyDuesController extends Controller
                 // so it still displays directly in listings/tables without
                 // needing to join through the tickets relation.
                 $dailyDue->update(['ticket_number' => $tickets->first()->ticket_number]);
+
+                // NEW: write the savings portion to the ledger so
+                // running_balance stays accurate and auditable.
+                // NOTE: if DailyDue already has a model event/observer that
+                // adjusts Member::savings_balance directly (see destroy()
+                // comment below), that observer and this ledger entry are
+                // now TWO sources of truth for the same money. They need to
+                // be reconciled -- either point the observer at this ledger
+                // service too, or drop the observer and derive
+                // savings_balance from the ledger's latest running_balance.
+                app(SavingsLedgerService::class)->record(
+                    member: $dailyDue->member,
+                    date: $dailyDue->collection_date,
+                    sourceType: 'daily_dues',
+                    txnType: 'deposit',
+                    amount: $dailyDue->savings_share,
+                    sourceable: $dailyDue,
+                    remarks: "Daily due - {$dailyDue->route} (Ticket {$tickets->first()->ticket_number})",
+                );
 
                 // Capture ticket numbers here, inside the transaction,
                 // instead of relying on a $dailyDue->tickets relation
@@ -249,7 +281,20 @@ class DailyDuesController extends Controller
                 'daily_due_id' => null,
             ]);
 
-            $dailyDue->delete(); // automatically adjusts savings_balance (model event)
+            // Reverse the savings deposit this due generated in store()
+            // before removing the record, so savings_ledger stays an
+            // accurate audit trail and running_balance / savings_balance
+            // don't drift.
+            app(SavingsLedgerService::class)->record(
+                member: $dailyDue->member,
+                date: today()->toDateString(),
+                sourceType: 'adjustment',
+                txnType: 'withdrawal',
+                amount: $dailyDue->savings_share,
+                remarks: "Reversal - deleted daily due #{$dailyDue->id} ({$dailyDue->route}, {$dailyDue->collection_date->toDateString()})",
+            );
+
+            $dailyDue->delete();
         });
 
         return redirect()->route('daily-dues.index')

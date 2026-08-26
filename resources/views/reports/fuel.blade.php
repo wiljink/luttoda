@@ -1,84 +1,68 @@
 @extends('layouts.app')
 
-@section('title', 'Fuel Consumption Report')
-
 @section('content')
-<div class="max-w-6xl mx-auto">
+    <h1 class="text-2xl font-semibold text-gray-800 mb-6">Fuel Consumption Report</h1>
 
-    <div class="flex items-center justify-between mb-6">
-        <h1 class="text-2xl font-bold text-gray-800">Fuel Consumption Report</h1>
-        <a href="{{ route('reports.export', ['type' => 'fuel', 'date' => $to]) }}"
-           class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Export PDF
-        </a>
-    </div>
+    <div class="space-y-6">
 
-    {{-- Date range filter --}}
-    <form method="GET" action="{{ route('reports.fuel') }}" class="flex flex-wrap items-end gap-3 mb-6 bg-white p-4 rounded-lg shadow-sm">
-        <div>
-            <label for="from" class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">From</label>
-            <input type="date" name="from" id="from" value="{{ $from }}"
-                   class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400">
-        </div>
-        <div>
-            <label for="to" class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">To</label>
-            <input type="date" name="to" id="to" value="{{ $to }}"
-                   class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400">
-        </div>
-        <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition">
-            Filter
-        </button>
-    </form>
+        <form method="GET" class="bg-white p-4 shadow-sm rounded-lg flex items-end gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">From</label>
+                <input type="date" name="from" value="{{ $from }}" class="mt-1 border-gray-300 rounded-md shadow-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">To</label>
+                <input type="date" name="to" value="{{ $to }}" class="mt-1 border-gray-300 rounded-md shadow-sm">
+            </div>
+            <button type="submit" class="px-4 py-2 bg-slate-800 text-white rounded-md text-sm">Filter</button>
+        </form>
 
-    <div class="bg-white rounded-lg shadow-sm overflow-hidden">
-        <div class="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-gray-200">
-            <span class="font-semibold text-gray-800">
-                Records from {{ \Carbon\Carbon::parse($from)->format('M d, Y') }} to {{ \Carbon\Carbon::parse($to)->format('M d, Y') }}
-            </span>
-            <span class="text-xs font-medium text-gray-500 bg-gray-200 px-2 py-1 rounded-full">{{ $records->count() }} entries</span>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="bg-white p-4 shadow-sm rounded-lg">
+                <p class="text-sm text-gray-500">Total Liters</p>
+                <p class="text-xl font-semibold text-gray-800">{{ number_format($records->sum('liters'), 2) }} L</p>
+            </div>
+            <div class="bg-white p-4 shadow-sm rounded-lg">
+                <p class="text-sm text-gray-500">Total Rebate</p>
+                <p class="text-xl font-semibold text-green-700">₱{{ number_format($records->sum('total_rebate'), 2) }}</p>
+            </div>
+            <div class="bg-white p-4 shadow-sm rounded-lg">
+                <p class="text-sm text-gray-500">Total Coop Deposit</p>
+                <p class="text-xl font-semibold text-gray-800">₱{{ number_format($records->sum('total_coop_deposit'), 2) }}</p>
+            </div>
         </div>
-        <div class="overflow-x-auto">
-            <table class="w-full text-sm text-left">
-                <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
+
+        <div class="bg-white shadow-sm rounded-lg overflow-hidden">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
                     <tr>
-                        <th class="px-4 py-3">#</th>
-                        <th class="px-4 py-3">Date</th>
-                        <th class="px-4 py-3">Member</th>
-                        <th class="px-4 py-3">Vehicle</th>
-                        <th class="px-4 py-3">Liters</th>
-                        <th class="px-4 py-3 text-right">Amount</th>
+                        <th class="px-4 py-2 text-left">Date</th>
+                        <th class="px-4 py-2 text-left">Member</th>
+                        <th class="px-4 py-2 text-left">Station</th>
+                        <th class="px-4 py-2 text-right">Liters</th>
+                        <th class="px-4 py-2 text-right">Amount</th>
+                        <th class="px-4 py-2 text-right">Rebate</th>
+                        <th class="px-4 py-2 text-right">Coop Deposit</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
-                    @forelse($records as $i => $record)
-                        <tr class="hover:bg-gray-50">
-                            <td class="px-4 py-3 text-gray-700">{{ $i + 1 }}</td>
-                            <td class="px-4 py-3 text-gray-600">{{ \Carbon\Carbon::parse($record->consumption_date)->format('M d, Y') }}</td>
-                            <td class="px-4 py-3 text-gray-800">{{ $record->member->name ?? 'N/A' }}</td>
-                            <td class="px-4 py-3 text-gray-500">{{ $record->vehicle_no ?? '-' }}</td>
-                            <td class="px-4 py-3 text-gray-500">{{ $record->liters ?? '-' }}</td>
-                            <td class="px-4 py-3 text-right font-medium text-gray-800">₱{{ number_format($record->amount ?? 0, 2) }}</td>
+                    @forelse ($records as $record)
+                        <tr>
+                            <td class="px-4 py-2">{{ $record->consumption_date->format('M d, Y') }}</td>
+                            <td class="px-4 py-2">{{ $record->member->full_name ?? '—' }}</td>
+                            <td class="px-4 py-2">{{ $record->refill_station ?? '—' }}</td>
+                            <td class="px-4 py-2 text-right">{{ number_format($record->liters, 2) }}</td>
+                            <td class="px-4 py-2 text-right">₱{{ number_format($record->amount, 2) }}</td>
+                            <td class="px-4 py-2 text-right">₱{{ number_format($record->total_rebate, 2) }}</td>
+                            <td class="px-4 py-2 text-right">₱{{ number_format($record->total_coop_deposit, 2) }}</td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="px-4 py-10 text-center text-gray-400">No fuel records found for this range.</td>
+                            <td colspan="7" class="px-4 py-6 text-center text-gray-500">No fuel records for this range.</td>
                         </tr>
                     @endforelse
                 </tbody>
-                @if($records->count())
-                    <tfoot class="bg-gray-50">
-                        <tr>
-                            <th colspan="5" class="px-4 py-3 text-right text-gray-600">Total</th>
-                            <th class="px-4 py-3 text-right text-gray-800">₱{{ number_format($records->sum('amount'), 2) }}</th>
-                        </tr>
-                    </tfoot>
-                @endif
             </table>
         </div>
     </div>
-
-</div>
 @endsection

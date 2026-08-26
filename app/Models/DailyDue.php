@@ -40,13 +40,10 @@ class DailyDue extends Model
             $due->association_share = self::ASSOCIATION_PER_TICKET * $quantity;
         });
 
-        static::created(function ($due) {
-            $due->member->increment('savings_balance', $due->savings_share);
-        });
-
-        static::deleted(function ($due) {
-            $due->member->decrement('savings_balance', $due->savings_share);
-        });
+        // Balance updates are NOT handled here. DailyDuesController::store()
+        // writes the savings_share to savings_ledger via SavingsLedgerService,
+        // which is the single place that adjusts Member::savings_balance --
+        // keeping this model event too would double-count every deposit.
     }
 
     public function member()

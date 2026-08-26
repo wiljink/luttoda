@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Member;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class MemberController extends Controller
 {
@@ -45,7 +46,12 @@ class MemberController extends Controller
             'address' => 'nullable|string|max:255',
             'date_joined' => 'required|date',
             'status' => ['required', 'in:active,inactive'],
+            'photo' => 'nullable|image|max:2048',
         ]);
+
+        if ($request->hasFile('photo')) {
+            $validated['photo_path'] = $request->file('photo')->store('members', 'public');
+        }
 
         Member::create($validated);
 
@@ -77,7 +83,21 @@ class MemberController extends Controller
             'contact_number' => 'nullable|string|max:20',
             'address' => 'nullable|string|max:255',
             'status' => 'required|in:active,inactive',
+            'photo' => 'nullable|image|max:2048',
+            'remove_photo' => 'nullable|boolean',
         ]);
+
+        if ($request->hasFile('photo')) {
+            if ($member->photo_path) {
+                Storage::disk('public')->delete($member->photo_path);
+            }
+            $validated['photo_path'] = $request->file('photo')->store('members', 'public');
+        } elseif ($request->boolean('remove_photo') && $member->photo_path) {
+            Storage::disk('public')->delete($member->photo_path);
+            $validated['photo_path'] = null;
+        }
+
+        unset($validated['photo'], $validated['remove_photo']);
 
         $member->update($validated);
 
@@ -87,7 +107,7 @@ class MemberController extends Controller
 
     public function destroy(Member $member)
     {
-        $member->delete(); // soft delete
+        $member->delete(); // soft delete -- photo file is kept in case the member is restored
         return redirect()->route('members.index')
             ->with('success', 'Member Successfully Deleted.');
     }
