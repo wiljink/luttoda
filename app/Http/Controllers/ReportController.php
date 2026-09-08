@@ -9,15 +9,13 @@ use App\Models\IncomeExpense;
 use App\Models\Loan;
 use App\Models\Member;
 use App\Services\Reports\LuttodaReportService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Barryvdh\DomPDF\Facade\Pdf;
 
 class ReportController extends Controller
 {
-    public function __construct(protected LuttodaReportService $reports)
-    {
-    }
+    public function __construct(protected LuttodaReportService $reports) {}
 
     public function daily(Request $request)
     {
@@ -30,7 +28,7 @@ class ReportController extends Controller
         // Per collector + route rollup. Variance = a due whose ticket_quantity
         // doesn't match how many Ticket rows actually exist for it.
         $collectionReport = $duesRaw
-            ->groupBy(fn ($due) => $due->route . '|' . ($due->collector->name ?? 'Unassigned'))
+            ->groupBy(fn ($due) => $due->route.'|'.($due->collector->name ?? 'Unassigned'))
             ->map(function ($group) {
                 $first = $group->first();
 
@@ -115,6 +113,24 @@ class ReportController extends Controller
         return $pdf->download("member-ledger-{$member->member_no}.pdf");
     }
 
+    /**
+     * PDF statement of account for one member, for a calendar year
+     * (defaults to the current year; ?year=YYYY to pick another).
+     * Any member's statement can be printed on request.
+     */
+    public function exportMemberStatement(Member $member, Request $request)
+    {
+        $year = (int) $request->get('year', now()->year);
+
+        $data = $this->reports->memberStatementOfAccount($member->id, $year);
+
+        $pdf = Pdf::loadView('reports.pdf.member-statement', $data + [
+            'generatedAt' => now(),
+        ]);
+
+        return $pdf->download("statement-{$member->member_no}-{$year}.pdf");
+    }
+
     public function fuelConsumption(Request $request)
     {
         $from = $request->get('from', now()->startOfMonth()->toDateString());
@@ -137,6 +153,7 @@ class ReportController extends Controller
         };
 
         $pdf = Pdf::loadView("reports.pdf.{$type}", array_merge($data, ['date' => $date]));
+
         return $pdf->download("luttoda-{$type}-{$date}.pdf");
     }
 
@@ -153,6 +170,114 @@ class ReportController extends Controller
         $totalPending = $this->reports->rebatePoolTotalPending($year);
 
         return view('reports.rebate-pool', compact('members', 'totalPending', 'year'));
+    }
+
+    /**
+     * View-based page for the Annual Dividend Rebate + a Release button.
+     * The dividend is (member's diesel liters for the year x diesel
+     * price) / 2, credited to savings.
+     */
+    public function dividendRebatePage(Request $request)
+    {
+        $year = (int) $request->get('year', now()->year);
+
+        $members = $this->reports->dividendRebateReport($year);
+        $totalPending = $this->reports->dividendRebateTotalPending($year);
+
+        return view('reports.dividend-rebate', compact('members', 'totalPending', 'year'));
+    }
+
+    /**
+     * View-based Collections / Rental Income report: income_expenses
+     * income grouped by category for a date range.
+     */
+    public function collectionsIncomePage(Request $request)
+    {
+        $from = $request->get('from', now()->startOfMonth()->toDateString());
+        $to = $request->get('to', now()->toDateString());
+
+        return view('reports.collections-income', array_merge(
+            $this->reports->collectionsIncomeReport($from, $to),
+            ['from' => $from, 'to' => $to],
+        ));
+    }
+
+    public function collectionsIncome(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date',
+        ]);
+
+        $from = $data['start_date'] ?? now()->startOfMonth()->toDateString();
+        $to = $data['end_date'] ?? now()->toDateString();
+
+        $report = $this->reports->collectionsIncomeReport($from, $to);
+        unset($report['transactions']); // keep the JSON payload small
+
+        return response()->json($report);
+    }
+
+    /**
+     * View-based Annual Savings Return page + a Release button. Pays
+     * back ₱35 savings + ₱7.50 share per ticket in cash, once a year.
+     */
+    public function savingsReturnPage(Request $request)
+    {
+        $year = (int) $request->get('year', now()->year);
+
+        return view('reports.savings-return', [
+            'members' => $this->reports->savingsReturnReport($year),
+            'totalPending' => $this->reports->savingsReturnTotalPending($year),
+            'returnDate' => $this->reports->savingsReturnDate($year),
+            'year' => $year,
+        ]);
+    }
+
+    public function savingsReturn(Request $request): JsonResponse
+    {
+        $data = $request->validate(['year' => 'nullable|integer']);
+        $year = (int) ($data['year'] ?? now()->year);
+
+        return response()->json([
+            'year' => $year,
+            'members' => $this->reports->savingsReturnReport($year),
+            'total_pending' => $this->reports->savingsReturnTotalPending($year),
+        ]);
+    }
+
+    public function releaseSavingsReturn(Request $request, int $year)
+    {
+        $paid = $this->reports->markSavingsReturnReleased($year);
+
+        if ($request->wantsJson()) {
+            return response()->json(['year' => $year, 'members_paid' => $paid]);
+        }
+
+        return back()->with('success', "Annual savings return released for {$year} ({$paid} member(s) paid).");
+    }
+
+    public function dividendRebate(Request $request): JsonResponse
+    {
+        $data = $request->validate(['year' => 'nullable|integer']);
+        $year = (int) ($data['year'] ?? now()->year);
+
+        return response()->json([
+            'year' => $year,
+            'members' => $this->reports->dividendRebateReport($year),
+            'total_pending' => $this->reports->dividendRebateTotalPending($year),
+        ]);
+    }
+
+    public function releaseDividend(Request $request, int $year)
+    {
+        $updated = $this->reports->markDividendReleased($year);
+
+        if ($request->wantsJson()) {
+            return response()->json(['year' => $year, 'records_updated' => $updated]);
+        }
+
+        return back()->with('success', "Dividend rebate released for {$year} ({$updated} member(s) credited).");
     }
 
     /**
@@ -228,7 +353,7 @@ class ReportController extends Controller
     {
         $data = $request->validate([
             'start_date' => 'required|date',
-            'end_date'   => 'required|date|after_or_equal:start_date',
+            'end_date' => 'required|date|after_or_equal:start_date',
         ]);
 
         return response()->json(
@@ -260,7 +385,7 @@ class ReportController extends Controller
         $data = $request->validate(['year' => 'required|integer']);
 
         return response()->json([
-            'members'       => $this->reports->rebatePoolReport($data['year']),
+            'members' => $this->reports->rebatePoolReport($data['year']),
             'total_pending' => $this->reports->rebatePoolTotalPending($data['year']),
         ]);
     }
@@ -270,7 +395,7 @@ class ReportController extends Controller
     {
         $data = $request->validate([
             'start_date' => 'required|date',
-            'end_date'   => 'required|date|after_or_equal:start_date',
+            'end_date' => 'required|date|after_or_equal:start_date',
         ]);
 
         return response()->json(
@@ -283,7 +408,7 @@ class ReportController extends Controller
     {
         $data = $request->validate([
             'start_date' => 'required|date',
-            'end_date'   => 'required|date|after_or_equal:start_date',
+            'end_date' => 'required|date|after_or_equal:start_date',
         ]);
 
         return response()->json(
@@ -296,7 +421,7 @@ class ReportController extends Controller
     {
         $data = $request->validate([
             'start_date' => 'required|date',
-            'end_date'   => 'required|date|after_or_equal:start_date',
+            'end_date' => 'required|date|after_or_equal:start_date',
         ]);
 
         return response()->json(
@@ -309,7 +434,7 @@ class ReportController extends Controller
     {
         $data = $request->validate([
             'start_date' => 'required|date',
-            'end_date'   => 'required|date|after_or_equal:start_date',
+            'end_date' => 'required|date|after_or_equal:start_date',
         ]);
 
         return response()->json(
@@ -322,7 +447,7 @@ class ReportController extends Controller
     {
         $data = $request->validate([
             'start_date' => 'required|date',
-            'end_date'   => 'required|date|after_or_equal:start_date',
+            'end_date' => 'required|date|after_or_equal:start_date',
         ]);
 
         return response()->json([
@@ -344,7 +469,7 @@ class ReportController extends Controller
     {
         $data = $request->validate([
             'start_month' => 'required|date',
-            'end_month'   => 'required|date|after_or_equal:start_month',
+            'end_month' => 'required|date|after_or_equal:start_month',
         ]);
 
         return response()->json(
@@ -375,7 +500,7 @@ class ReportController extends Controller
 
         if ($request->wantsJson()) {
             return response()->json([
-                'year'            => $year,
+                'year' => $year,
                 'records_updated' => $updated,
             ]);
         }

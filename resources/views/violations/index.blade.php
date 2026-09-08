@@ -26,6 +26,7 @@
             <tr>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Type</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Sanction</th>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Notes</th>
                 <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Actions</th>
             </tr>
@@ -35,6 +36,22 @@
                 <tr>
                     <td class="px-4 py-3 text-sm text-gray-700">{{ $violation->violation_date->format('M d, Y') }}</td>
                     <td class="px-4 py-3 text-sm text-gray-700">{{ $violation->type }}</td>
+                    <td class="px-4 py-3 text-sm">
+                        @if ($violation->sanction)
+                            <span @class([
+                                'inline-block text-xs font-semibold px-2 py-0.5 rounded-full',
+                                'bg-orange-100 text-orange-700' => $violation->sanction === 'suspension',
+                                'bg-red-100 text-red-700' => in_array($violation->sanction, ['termination', 'dismembership'], true),
+                            ])>
+                                {{ ucfirst($violation->sanction) }}@if ($violation->sanction === 'suspension' && $violation->sanction_until) · until {{ $violation->sanction_until->format('M d, Y') }}@endif
+                            </span>
+                            @if ($violation->sanction_lifted_at)
+                                <span class="block text-xs text-gray-400 mt-0.5">lifted {{ $violation->sanction_lifted_at->format('M d, Y') }}</span>
+                            @endif
+                        @else
+                            <span class="text-gray-400">—</span>
+                        @endif
+                    </td>
                     <td class="px-4 py-3 text-sm text-gray-500">{{ $violation->notes ?? '—' }}</td>
                     <td class="px-4 py-3 text-sm text-right space-x-3">
                         <a href="{{ route('members.violations.edit', [$member, $violation]) }}"
@@ -50,7 +67,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="4" class="px-4 py-6 text-center text-sm text-gray-500">
+                    <td colspan="5" class="px-4 py-6 text-center text-sm text-gray-500">
                         No violations recorded yet.
                     </td>
                 </tr>

@@ -3,7 +3,14 @@
 @section('title', 'File a Claim')
 
 @section('content')
-<div class="max-w-2xl mx-auto px-4 py-8">
+@php
+    $memberData = $members->mapWithKeys(fn ($m) => [$m->id => [
+        'name' => $m->firstname.' '.$m->lastname,
+        'dependents' => $m->activeDependents->map(fn ($d) => ['id' => $d->id, 'name' => $d->name.' ('.$d->relationship.')'])->values(),
+    ]]);
+@endphp
+<div class="max-w-2xl mx-auto px-4 py-8"
+     x-data="benefitForm(@js($memberData), '{{ route('benefits.eligibility') }}')">
 
     <p class="text-xs font-semibold tracking-widest text-amber-600 uppercase mb-1">Member Benefits</p>
     <h1 class="text-2xl font-bold text-slate-900 mb-6">File a Claim</h1>
@@ -23,7 +30,7 @@
 
         <div>
             <label for="member_id" class="block text-sm font-medium text-slate-700 mb-1.5">Member</label>
-            <select id="member_id" name="member_id" required
+            <select id="member_id" name="member_id" required x-model="memberId" @change="refresh()"
                     class="w-full rounded-lg border-slate-300 text-sm focus:border-[#1B3A4B] focus:ring-[#1B3A4B]">
                 <option value="">Select a member</option>
                 @foreach ($members as $member)
@@ -32,6 +39,45 @@
                     </option>
                 @endforeach
             </select>
+            <p class="mt-1 text-xs text-slate-400">Only active members (non-members are not eligible for benefits).</p>
+        </div>
+
+        {{-- Eligibility snapshot --}}
+        <template x-if="summary">
+            <div class="rounded-lg px-4 py-3 text-sm"
+                 :class="summary.eligible ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'">
+                <p x-show="summary.eligible">
+                    Eligible for <span x-text="summary.year"></span> —
+                    <span x-text="summary.tickets_ytd"></span> tickets,
+                    <span x-text="Number(summary.liters_ytd).toFixed(2)"></span> L diesel.
+                    <span x-text="summary.remaining_days"></span> of <span x-text="summary.max_days"></span> benefit days left.
+                </p>
+                <p x-show="!summary.eligible" x-text="summary.reason"></p>
+            </div>
+        </template>
+
+        <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1.5">Beneficiary</label>
+            <div class="flex gap-4 text-sm">
+                <label class="inline-flex items-center gap-2">
+                    <input type="radio" name="beneficiary_type" value="member" x-model="beneficiaryType" @change="refresh()" required> Member (self)
+                </label>
+                <label class="inline-flex items-center gap-2">
+                    <input type="radio" name="beneficiary_type" value="dependent" x-model="beneficiaryType" @change="refresh()"> Dependent
+                </label>
+            </div>
+            <div x-show="beneficiaryType === 'dependent'" x-cloak class="mt-2">
+                <select name="member_dependent_id" x-model="dependentId" @change="refresh()"
+                        class="w-full rounded-lg border-slate-300 text-sm focus:border-[#1B3A4B] focus:ring-[#1B3A4B]">
+                    <option value="">Select a dependent</option>
+                    <template x-for="d in dependents" :key="d.id">
+                        <option :value="d.id" x-text="d.name"></option>
+                    </template>
+                </select>
+                <p x-show="memberId && dependents.length === 0" class="mt-1 text-xs text-rose-500">
+                    This member has no active dependents. Add one from their profile first.
+                </p>
+            </div>
         </div>
 
         <div>
@@ -43,7 +89,7 @@
                     'sss' => 'SSS',
                 ] as $value => $label)
                     <label class="relative flex cursor-pointer items-center justify-center rounded-lg border border-slate-300 py-3 text-sm font-medium text-slate-700 hover:border-[#1B3A4B] has-[:checked]:border-[#1B3A4B] has-[:checked]:bg-[#1B3A4B]/5 has-[:checked]:text-[#1B3A4B]">
-                        <input type="radio" name="benefit_type" value="{{ $value }}" class="sr-only" {{ old('benefit_type') === $value ? 'checked' : '' }} required onchange="toggleDaysField()">
+                        <input type="radio" name="benefit_type" value="{{ $value }}" class="sr-only" x-model="benefitType" {{ old('benefit_type') === $value ? 'checked' : '' }} required>
                         {{ $label }}
                     </label>
                 @endforeach
@@ -56,11 +102,14 @@
                    class="w-full rounded-lg border-slate-300 text-sm focus:border-[#1B3A4B] focus:ring-[#1B3A4B]">
         </div>
 
-        <div id="days_field">
+        <div x-show="benefitType === 'hospitalization'" x-cloak>
             <label for="days" class="block text-sm font-medium text-slate-700 mb-1.5">Days confined</label>
             <input type="number" id="days" name="days" min="1" value="{{ old('days', 1) }}"
                    class="w-full rounded-lg border-slate-300 text-sm focus:border-[#1B3A4B] focus:ring-[#1B3A4B]">
-            <p class="mt-1 text-xs text-slate-400">Only applies to hospitalization claims.</p>
+            <p class="mt-1 text-xs text-slate-400">
+                Paid per day: ₱{{ number_format(\App\Models\Benefit::dailyRate('member'), 0) }} (member) /
+                ₱{{ number_format(\App\Models\Benefit::dailyRate('dependent'), 0) }} (dependent).
+            </p>
         </div>
 
         <div>
@@ -80,10 +129,37 @@
 </div>
 
 <script>
-    function toggleDaysField() {
-        const type = document.querySelector('input[name="benefit_type"]:checked')?.value;
-        document.getElementById('days_field').style.display = (type === 'hospitalization') ? 'block' : 'none';
+    function benefitForm(memberData, eligibilityUrl) {
+        return {
+            memberData,
+            eligibilityUrl,
+            memberId: '{{ old('member_id') }}',
+            beneficiaryType: '{{ old('beneficiary_type', 'member') }}',
+            dependentId: '{{ old('member_dependent_id') }}',
+            benefitType: '{{ old('benefit_type', 'hospitalization') }}',
+            summary: null,
+            get dependents() {
+                return this.memberData[this.memberId]?.dependents ?? [];
+            },
+            init() {
+                if (this.memberId) this.refresh();
+            },
+            async refresh() {
+                if (!this.memberId) { this.summary = null; return; }
+                const params = new URLSearchParams({ member_id: this.memberId });
+                if (this.beneficiaryType === 'dependent' && this.dependentId) {
+                    params.append('member_dependent_id', this.dependentId);
+                }
+                try {
+                    const res = await fetch(`${this.eligibilityUrl}?${params.toString()}`, {
+                        headers: { 'Accept': 'application/json' },
+                    });
+                    this.summary = res.ok ? await res.json() : null;
+                } catch (e) {
+                    this.summary = null;
+                }
+            },
+        };
     }
-    document.addEventListener('DOMContentLoaded', toggleDaysField);
 </script>
 @endsection

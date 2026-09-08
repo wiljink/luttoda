@@ -19,6 +19,12 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Raw MySQL enum widening — no-op on other drivers (see the
+        // matching guard in the rebate_release migration).
+        if (DB::getDriverName() !== 'mysql') {
+            return;
+        }
+
         DB::statement("
             ALTER TABLE savings_ledger
             MODIFY source_type ENUM(
@@ -35,6 +41,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (DB::getDriverName() !== 'mysql') {
+            return;
+        }
+
         // NOTE: rolling back will fail if any rows already use
         // 'benefit_release' -- clean those up first if you ever need to
         // reverse this migration.

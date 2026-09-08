@@ -72,6 +72,17 @@
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Membership Category *</label>
+                <select name="category" required class="w-full rounded border-gray-300 p-2 border focus:ring focus:ring-blue-200">
+                    <option value="member" {{ old('category', 'member') === 'member' ? 'selected' : '' }}>Member</option>
+                    <option value="non-member" {{ old('category') === 'non-member' ? 'selected' : '' }}>Non-member</option>
+                </select>
+                <p class="text-xs text-gray-400 mt-1">Non-members pay dues but cannot claim benefits or the annual dividend.</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-1">Contact Number</label>
                 <input type="text" name="contact_number" value="{{ old('contact_number') }}" placeholder="e.g. 09123456789" class="w-full rounded border-gray-300 p-2 border focus:ring focus:ring-blue-200">
             </div>

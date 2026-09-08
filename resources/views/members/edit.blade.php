@@ -112,11 +112,29 @@
                 <input type="text" name="address" value="{{ old('address', $member->address) }}" class="w-full rounded border-gray-300 p-2 border focus:ring focus:ring-blue-200">
             </div>
             <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-1">Status *</label>
-                <select name="status" required class="w-full rounded border-gray-300 p-2 border focus:ring focus:ring-blue-200">
-                    <option value="active" {{ old('status', $member->status) === 'active' ? 'selected' : '' }}>Active</option>
-                    <option value="inactive" {{ old('status', $member->status) === 'inactive' ? 'selected' : '' }}>Inactive</option>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Membership Category *</label>
+                <select name="category" required class="w-full rounded border-gray-300 p-2 border focus:ring focus:ring-blue-200">
+                    <option value="member" {{ old('category', $member->category) === 'member' ? 'selected' : '' }}>Member</option>
+                    <option value="non-member" {{ old('category', $member->category) === 'non-member' ? 'selected' : '' }}>Non-member</option>
                 </select>
+                <p class="text-xs text-gray-400 mt-1">Non-members pay dues but cannot claim benefits or the annual dividend.</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6" x-data="{ status: '{{ old('status', $member->status) }}' }">
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Status *</label>
+                <select name="status" x-model="status" required class="w-full rounded border-gray-300 p-2 border focus:ring focus:ring-blue-200">
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="suspended">Suspended</option>
+                    <option value="terminated">Terminated</option>
+                </select>
+                <p class="text-xs text-gray-400 mt-1">Suspension / termination is normally set automatically from a violation sanction.</p>
+            </div>
+            <div x-show="status === 'suspended'">
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Suspended Until</label>
+                <input type="date" name="suspended_until" value="{{ old('suspended_until', optional($member->suspended_until)->format('Y-m-d')) }}" class="w-full rounded border-gray-300 p-2 border focus:ring focus:ring-blue-200">
             </div>
         </div>
 

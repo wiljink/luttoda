@@ -54,6 +54,15 @@
             <p class="text-xs text-gray-400 mt-1">Ilisda kung pila ka ticket ang paliton sa maong route (₱50 kada ticket).</p>
         </div>
 
+        <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Alkansiya (SSS) — voluntary savings</label>
+            <input type="number" name="alkansiya" min="0" step="0.01"
+                   value="{{ old('alkansiya') }}"
+                   class="w-full rounded border-gray-300 p-2 border focus:ring focus:ring-blue-200"
+                   placeholder="0.00">
+            <p class="text-xs text-gray-400 mt-1">Optional. Dili kini compulsory — i-encode lang kung naghatag ang member og alkansiya para sa SSS. Gitipigan nga separado sa regular nga savings.</p>
+        </div>
+
         <div class="bg-blue-50 border border-blue-100 rounded p-3">
             <p class="text-sm font-semibold text-blue-700">
                 🎫 Ticket(s) to be assigned: <span id="nextTicketDisplay">—</span>

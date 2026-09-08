@@ -4,64 +4,18 @@ namespace Tests\Feature;
 
 use App\Models\Member;
 use App\Services\SavingsLedgerService;
-use Illuminate\Support\Facades\Schema;
-use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * Builds its own minimal members/savings_ledger schema instead of running
- * the full migration set: two existing migrations (source_type enum
- * widening for 'rebate_release' / 'benefit_release') use raw MySQL
- * `ALTER TABLE ... MODIFY` syntax that SQLite (the configured test DB,
- * see phpunit.xml) rejects, so `RefreshDatabase` can't run here yet. That
- * cross-DB migration gap is pre-existing and separate from the
- * SavingsLedgerService bug this test targets.
+ * Runs against the full migration set. The two source_type enum-widening
+ * migrations are MySQL-only (guarded by a driver check); a later migration
+ * converts source_type to a plain string for every driver, so SQLite gets
+ * a working table and open-ended source_type values.
  */
 class SavingsLedgerServiceTest extends TestCase
 {
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        Schema::create('members', function (Blueprint $table) {
-            $table->id();
-            $table->string('member_no')->unique();
-            $table->string('firstname');
-            $table->string('lastname');
-            $table->string('middlename')->nullable();
-            $table->string('plate_number')->unique();
-            $table->string('operator_name');
-            $table->string('route');
-            $table->string('contact_number')->nullable();
-            $table->string('address')->nullable();
-            $table->date('date_joined')->nullable();
-            $table->string('status')->default('active');
-            $table->decimal('savings_balance', 10, 2)->default(0);
-            $table->timestamps();
-            $table->softDeletes();
-        });
-
-        Schema::create('savings_ledger', function (Blueprint $table) {
-            $table->id('ledger_id');
-            $table->foreignId('member_id')->constrained('members')->cascadeOnDelete();
-            $table->date('date');
-            $table->string('source_type');
-            $table->string('txn_type');
-            $table->decimal('amount', 12, 2);
-            $table->decimal('running_balance', 12, 2);
-            $table->nullableMorphs('sourceable');
-            $table->text('remarks')->nullable();
-            $table->timestamps();
-        });
-    }
-
-    protected function tearDown(): void
-    {
-        Schema::dropIfExists('savings_ledger');
-        Schema::dropIfExists('members');
-
-        parent::tearDown();
-    }
+    use RefreshDatabase;
 
     public function test_record_writes_ledger_entry_with_correct_member_id(): void
     {

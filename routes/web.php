@@ -4,11 +4,14 @@ use App\Http\Controllers\BenefitController;
 use App\Http\Controllers\DailyDuesController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FuelConsumptionController;
+use App\Http\Controllers\ImportController;
 use App\Http\Controllers\IncomeExpenseController;
 use App\Http\Controllers\LoanController;
 use App\Http\Controllers\MemberController;
+use App\Http\Controllers\MemberDependentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\SettingController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\ViolationController;
@@ -41,9 +44,11 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware(['role:admin'])->group(function () {
         Route::resource('members', MemberController::class);
         Route::resource('income-expenses', IncomeExpenseController::class);
+        Route::get('benefits/eligibility', [BenefitController::class, 'eligibility'])->name('benefits.eligibility');
         Route::resource('benefits', BenefitController::class)->except(['edit', 'update']);
         Route::resource('loans', LoanController::class)->except(['edit', 'update']);
         Route::resource('members.violations', ViolationController::class)->except(['show']);
+        Route::resource('members.dependents', MemberDependentController::class)->only(['store', 'update', 'destroy']);
 
         // Loan special actions
         Route::post('loans/{loan}/approve', [LoanController::class, 'approve'])->name('loans.approve');
@@ -70,6 +75,14 @@ Route::middleware(['auth'])->group(function () {
 
         // User Management
         Route::resource('users', UserController::class)->except(['show']);
+
+        // System Settings (business rules)
+        Route::get('settings', [SettingController::class, 'index'])->name('settings.index');
+        Route::put('settings', [SettingController::class, 'update'])->name('settings.update');
+
+        // Excel template import (members / daily collection / expenses / rental)
+        Route::get('import', [ImportController::class, 'index'])->name('import.index');
+        Route::post('import', [ImportController::class, 'store'])->name('import.store');
     });
 
     /*
@@ -101,6 +114,7 @@ Route::middleware(['auth'])->group(function () {
 
         Route::get('member/{member}', [ReportController::class, 'memberLedger'])->name('member');
         Route::get('member/{member}/export', [ReportController::class, 'exportMemberLedger'])->name('member.export');
+        Route::get('member/{member}/statement.pdf', [ReportController::class, 'exportMemberStatement'])->name('member.statement.pdf');
 
         Route::get('fuel', [ReportController::class, 'fuelConsumption'])->name('fuel');
         Route::get('export/{type}', [ReportController::class, 'export'])->name('export');
@@ -141,6 +155,26 @@ Route::middleware(['auth'])->group(function () {
         Route::get('rebate-pool/view', [ReportController::class, 'rebatePoolPage'])
             ->name('rebate-pool.page');
 
+        // Annual Savings Return: ₱35 savings + ₱7.50 share per ticket paid
+        // back in cash once a year (default 30 November).
+        Route::get('savings-return', [ReportController::class, 'savingsReturn'])
+            ->name('savings-return');
+        Route::get('savings-return/view', [ReportController::class, 'savingsReturnPage'])
+            ->name('savings-return.page');
+        Route::post('savings-return/{year}/release', [ReportController::class, 'releaseSavingsReturn'])
+            ->whereNumber('year')
+            ->name('savings-return.release');
+
+        // Annual Dividend Rebate: (member diesel liters x diesel price) / 2,
+        // released once a year into member savings.
+        Route::get('dividend-rebate', [ReportController::class, 'dividendRebate'])
+            ->name('dividend-rebate');
+        Route::get('dividend-rebate/view', [ReportController::class, 'dividendRebatePage'])
+            ->name('dividend-rebate.page');
+        Route::post('dividend-rebate/{year}/release', [ReportController::class, 'releaseDividend'])
+            ->whereNumber('year')
+            ->name('dividend-rebate.release');
+
         Route::get('association-fund', [ReportController::class, 'associationFund'])
             ->name('association-fund');
 
@@ -158,6 +192,12 @@ Route::middleware(['auth'])->group(function () {
 
         Route::get('rental-income', [ReportController::class, 'rentalIncome'])
             ->name('rental-income');
+
+        // Collections / Rental Income (HTML page + JSON), grouped by category.
+        Route::get('collections-income', [ReportController::class, 'collectionsIncome'])
+            ->name('collections-income');
+        Route::get('collections-income/view', [ReportController::class, 'collectionsIncomePage'])
+            ->name('collections-income.page');
 
         Route::get('benefits-utilization', [ReportController::class, 'benefitsUtilization'])
             ->name('benefits-utilization');

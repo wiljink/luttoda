@@ -35,10 +35,22 @@
                 'rejected' => 'bg-red-100 text-red-700',
             ];
         @endphp
-        <span class="px-3 py-1 rounded-full text-sm font-semibold {{ $statusColors[$loan->status] ?? 'bg-gray-100 text-gray-700' }}">
-            {{ ucfirst($loan->status) }}
-        </span>
+        <div class="flex items-center gap-2">
+            <span class="px-3 py-1 rounded-full text-xs font-semibold {{ $loan->isDiesel() ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600' }}">
+                {{ $loan->isDiesel() ? 'Diesel Loan' : 'Cash Loan' }}
+            </span>
+            <span class="px-3 py-1 rounded-full text-sm font-semibold {{ $statusColors[$loan->status] ?? 'bg-gray-100 text-gray-700' }}">
+                {{ ucfirst($loan->status) }}
+            </span>
+        </div>
     </div>
+
+    @if ($loan->isDiesel() && $loan->liters_basis)
+        <div class="rounded-lg bg-amber-50 border border-amber-100 px-4 py-3 text-sm text-amber-800">
+            Backed by <strong>{{ rtrim(rtrim(number_format($loan->liters_basis, 2), '0'), '.') }} L</strong>
+            of diesel purchased this year.
+        </div>
+    @endif
 
     <div class="grid grid-cols-2 gap-6">
         <div>
@@ -66,6 +78,22 @@
         </div>
     </div>
 
+    <div class="grid grid-cols-3 gap-6">
+        <div>
+            <div class="text-xs font-semibold text-gray-400 uppercase mb-1">Term</div>
+            <div class="text-gray-800 font-medium">{{ $loan->term_months }} month(s)</div>
+        </div>
+        <div>
+            <div class="text-xs font-semibold text-gray-400 uppercase mb-1">Penalty Rate</div>
+            <div class="text-gray-800 font-medium">{{ number_format($loan->penalty_rate, 2) }}% / month</div>
+        </div>
+        @php $outstandingPenalty = $loan->schedules->sum(fn ($s) => $s->outstanding_penalty); @endphp
+        <div>
+            <div class="text-xs font-semibold text-gray-400 uppercase mb-1">Outstanding Penalty</div>
+            <div class="{{ $outstandingPenalty > 0 ? 'text-red-600' : 'text-gray-800' }} font-medium">₱{{ number_format($outstandingPenalty, 2) }}</div>
+        </div>
+    </div>
+
     <div>
         <div class="text-xs font-semibold text-gray-400 uppercase mb-1">Purpose</div>
         <div class="text-gray-800">{{ $loan->purpose ?: '—' }}</div>
@@ -90,18 +118,78 @@
 </div>
 
 @if (in_array($loan->status, ['approved', 'active', 'paid']))
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 max-w-2xl overflow-hidden mb-6">
+        <div class="px-4 py-3 border-b border-gray-100 font-semibold text-gray-700 text-sm">Amortization Schedule</div>
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">#</th>
+                    <th class="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Due Date</th>
+                    <th class="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Principal</th>
+                    <th class="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Interest</th>
+                    <th class="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Penalty</th>
+                    <th class="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Outstanding</th>
+                    <th class="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                @php
+                    $scheduleStatusColors = [
+                        'pending' => 'bg-gray-100 text-gray-700',
+                        'partial' => 'bg-yellow-100 text-yellow-700',
+                        'paid' => 'bg-green-100 text-green-700',
+                        'overdue' => 'bg-red-100 text-red-700',
+                    ];
+                @endphp
+                @foreach ($loan->schedules as $schedule)
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-3 py-2 text-sm text-gray-600">{{ $schedule->installment_no }}</td>
+                        <td class="px-3 py-2 text-sm text-gray-600">{{ $schedule->due_date->format('M d, Y') }}</td>
+                        <td class="px-3 py-2 text-sm text-right text-gray-800">₱{{ number_format($schedule->principal_due, 2) }}</td>
+                        <td class="px-3 py-2 text-sm text-right text-gray-800">₱{{ number_format($schedule->interest_due, 2) }}</td>
+                        <td class="px-3 py-2 text-sm text-right {{ $schedule->penalty_due > 0 ? 'text-red-600 font-semibold' : 'text-gray-800' }}">₱{{ number_format($schedule->penalty_due, 2) }}</td>
+                        <td class="px-3 py-2 text-sm text-right font-semibold text-gray-800">₱{{ number_format($schedule->outstanding_total, 2) }}</td>
+                        <td class="px-3 py-2 text-sm">
+                            <span class="px-2 py-1 rounded-full text-xs font-semibold {{ $scheduleStatusColors[$schedule->status] ?? 'bg-gray-100 text-gray-700' }}">
+                                {{ ucfirst($schedule->status) }}
+                            </span>
+                        </td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    </div>
+
     <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 max-w-2xl mb-6">
         <h2 class="text-lg font-semibold text-gray-800 mb-4">Record Payment</h2>
         @if ($loan->status !== 'paid')
-            <form action="{{ route('loans.payment', $loan) }}" method="POST" class="flex items-end gap-4">
+            <form action="{{ route('loans.payment', $loan) }}" method="POST" class="space-y-4">
                 @csrf
-                <div class="flex-1">
-                    <label class="block text-sm font-semibold text-gray-700 mb-1">Payment Amount (₱) *</label>
-                    <input type="number" step="0.01" min="1" max="{{ $loan->balance }}" name="amount" required class="w-full rounded border-gray-300 p-2 border focus:ring focus:ring-blue-200">
+                <div class="grid grid-cols-3 gap-4 items-end">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Payment Amount (₱) *</label>
+                        <input type="number" step="0.01" min="1" max="{{ $loan->balance }}" name="amount" required class="w-full rounded border-gray-300 p-2 border focus:ring focus:ring-blue-200">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">OR Number</label>
+                        <input type="text" name="or_number" class="w-full rounded border-gray-300 p-2 border focus:ring focus:ring-blue-200">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Method</label>
+                        <select name="payment_method" class="w-full rounded border-gray-300 p-2 border focus:ring focus:ring-blue-200">
+                            <option value="cash">Cash</option>
+                            <option value="bank_transfer">Bank Transfer</option>
+                            <option value="gcash">GCash</option>
+                            <option value="payroll_deduction">Payroll Deduction</option>
+                        </select>
+                    </div>
                 </div>
-                <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-semibold shadow-sm transition">
-                    Add Payment
-                </button>
+                <p class="text-xs text-gray-400">Payments are applied oldest installment first, penalty then interest then principal.</p>
+                <div class="flex justify-end">
+                    <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-semibold shadow-sm transition">
+                        Add Payment
+                    </button>
+                </div>
             </form>
         @else
             <p class="text-sm text-green-600 font-medium">This loan has been fully paid.</p>
@@ -115,7 +203,10 @@
         <thead class="bg-gray-50">
             <tr>
                 <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
+                <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">OR #</th>
+                <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Method</th>
                 <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Amount</th>
+                <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Allocation</th>
                 <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Received By</th>
             </tr>
         </thead>
@@ -123,12 +214,29 @@
             @forelse ($loan->payments as $payment)
                 <tr>
                     <td class="px-4 py-2 text-sm text-gray-600">{{ \Illuminate\Support\Carbon::parse($payment->payment_date)->format('M d, Y') }}</td>
+                    <td class="px-4 py-2 text-sm text-gray-600">{{ $payment->or_number ?: '—' }}</td>
+                    <td class="px-4 py-2 text-sm text-gray-600">{{ ucfirst(str_replace('_', ' ', $payment->payment_method ?: 'cash')) }}</td>
                     <td class="px-4 py-2 text-sm font-semibold text-gray-800">₱{{ number_format($payment->amount, 2) }}</td>
-                    <td class="px-4 py-2 text-sm text-gray-600">{{ $payment->receivedBy->name ?? '—' }}</td>
+                    <td class="px-4 py-2 text-xs text-gray-500">
+                        @php
+                            $penaltySum = $payment->allocations->sum('penalty_amount');
+                            $interestSum = $payment->allocations->sum('interest_amount');
+                            $principalSum = $payment->allocations->sum('principal_amount');
+                        @endphp
+                        @if ($payment->allocations->isEmpty())
+                            —
+                        @else
+                            P: ₱{{ number_format($principalSum, 2) }} · I: ₱{{ number_format($interestSum, 2) }}
+                            @if ($penaltySum > 0)
+                                · Pen: ₱{{ number_format($penaltySum, 2) }}
+                            @endif
+                        @endif
+                    </td>
+                    <td class="px-4 py-2 text-sm text-gray-600">{{ $payment->receiver->name ?? '—' }}</td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="3" class="px-4 py-4 text-center text-sm text-gray-400">No payments recorded yet.</td>
+                    <td colspan="6" class="px-4 py-4 text-center text-sm text-gray-400">No payments recorded yet.</td>
                 </tr>
             @endforelse
         </tbody>

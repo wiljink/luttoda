@@ -9,8 +9,11 @@ use App\Models\IncomeExpense;
 use App\Models\Loan;
 use App\Models\Member;
 use App\Models\SavingsLedger;
+use App\Models\Setting;
+use App\Services\SavingsLedgerService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class LuttodaReportService
 {
@@ -150,20 +153,42 @@ class LuttodaReportService
         $loans = Loan::where('member_id', $memberId)->whereYear('loan_date', $year)->with('payments')->get();
         $benefits = Benefit::where('member_id', $memberId)->whereYear('claim_date', $year)->get();
         $ledger = SavingsLedger::where('member_id', $memberId)->whereYear('date', $year)->orderBy('date')->get();
+        $alkansiya = \App\Models\AlkansiyaContribution::where('member_id', $memberId)
+            ->whereYear('contribution_date', $year)
+            ->orderBy('contribution_date')
+            ->get();
 
         return [
             'member' => [
                 'id' => $member->id,
                 'member_no' => $member->member_no,
                 'name' => $member->full_name,
+                'route' => $member->route,
+                'plate_number' => $member->plate_number,
+                'category' => $member->category,
             ],
             'year' => $year,
+            'days_paid' => $dues->count(),
+            'tickets_total' => (int) $dues->sum('ticket_quantity'),
             'daily_dues_total' => (float) $dues->sum('amount_paid'),
             'savings_contributed' => (float) $dues->sum('savings_share'),
+            'members_share_contributed' => (float) $dues->sum('rebate_share'),
+            'association_contributed' => (float) $dues->sum('association_share'),
             'fuel_total_liters' => (float) $fuel->sum('liters'),
             'fuel_rebate_earned' => (float) $fuel->sum('total_rebate'),
+            'alkansiya_total' => (float) $alkansiya->sum('amount'),
+            'alkansiya_balance' => (float) $member->alkansiya_balance,
+            'alkansiya_entries' => $alkansiya->map(fn ($a) => [
+                'date' => $a->contribution_date->toDateString(),
+                'amount' => (float) $a->amount,
+                'remarks' => $a->remarks,
+            ])->values(),
             'loans' => $loans->map(fn ($l) => [
+                'date' => $l->loan_date->toDateString(),
+                'type' => $l->type,
                 'amount' => (float) $l->amount,
+                'total_payable' => (float) $l->total_payable,
+                'paid' => (float) $l->payments->sum('amount'),
                 'balance' => (float) $l->balance,
                 'status' => $l->status,
             ])->values(),
@@ -173,6 +198,7 @@ class LuttodaReportService
                 'status' => $b->status,
             ])->values(),
             'savings_ledger_entries' => $ledger->count(),
+            'savings_balance' => (float) $member->savings_balance,
             'ending_balance' => (float) ($ledger->last()->running_balance ?? $member->savings_balance),
         ];
     }
@@ -219,6 +245,219 @@ class LuttodaReportService
     public function rebatePoolTotalPending(int $year): float
     {
         return (float) collect($this->rebatePoolReport($year))->sum('pending');
+    }
+
+    /**
+     * 6d. Annual Savings Return -- of the ₱50 daily due, ₱35 (savings) plus
+     * ₱7.50 (member's share / rebate) is paid back in cash to the member
+     * once a year (default 30 November). The remaining ₱7.50 is association
+     * income and is kept.
+     *
+     * entitlement = SUM(daily_dues.savings_share) + SUM(daily_dues.rebate_share) for the year
+     * returned    = SUM(savings_ledger.amount WHERE source_type='savings_return') for the year
+     * pending     = entitlement - returned
+     */
+    public function savingsReturnReport(int $year): array
+    {
+        $dues = DailyDue::whereYear('collection_date', $year)
+            ->select('member_id', DB::raw('SUM(savings_share) as savings'), DB::raw('SUM(rebate_share) as share'))
+            ->groupBy('member_id')
+            ->with('member')
+            ->get();
+
+        $returned = SavingsLedger::whereYear('date', $year)
+            ->where('source_type', 'savings_return')
+            ->select('member_id', DB::raw('SUM(amount) as total'))
+            ->groupBy('member_id')
+            ->pluck('total', 'member_id');
+
+        $shareReleased = SavingsLedger::whereYear('date', $year)
+            ->where('source_type', 'rebate_release')
+            ->select('member_id', DB::raw('SUM(amount) as total'))
+            ->groupBy('member_id')
+            ->pluck('total', 'member_id');
+
+        return $dues->map(function ($row) use ($returned, $shareReleased) {
+            $savings = (float) $row->savings;
+            $share = (float) $row->share;
+            $entitlement = round($savings + $share, 2);
+            $paid = (float) ($returned[$row->member_id] ?? 0);
+
+            return [
+                'member_id' => $row->member_id,
+                'member_name' => $row->member->full_name ?? null,
+                'savings' => $savings,
+                'share' => $share,
+                'share_released' => (float) ($shareReleased[$row->member_id] ?? 0),
+                'entitlement' => $entitlement,
+                'returned' => $paid,
+                'pending' => round($entitlement - $paid, 2),
+            ];
+        })->values()->all();
+    }
+
+    public function savingsReturnTotalPending(int $year): float
+    {
+        return (float) collect($this->savingsReturnReport($year))->sum('pending');
+    }
+
+    /** Date the return is paid on (from settings, default 30 November). */
+    public function savingsReturnDate(int $year): Carbon
+    {
+        $month = max(1, min(12, (int) Setting::get('savings_return_month', 11)));
+        $day = (int) Setting::get('savings_return_day', 30);
+
+        $date = Carbon::create($year, $month, 1);
+
+        return $date->day(min($day, $date->daysInMonth));
+    }
+
+    /**
+     * Pay out the pending annual savings return for the year. For each
+     * member with a pending amount:
+     *   1. bring any un-released ₱7.50 share into savings (rebate_release deposit)
+     *   2. withdraw the full entitlement in cash (savings_return withdrawal)
+     * Both dated the configured savings-return date. Idempotent.
+     *
+     * Returns the number of members paid.
+     */
+    public function markSavingsReturnReleased(int $year): int
+    {
+        $rows = collect($this->savingsReturnReport($year))->filter(fn ($r) => $r['pending'] > 0);
+
+        $ledger = app(SavingsLedgerService::class);
+        $date = $this->savingsReturnDate($year)->toDateString();
+        $paid = 0;
+
+        DB::transaction(function () use ($rows, $year, $ledger, $date, &$paid) {
+            foreach ($rows as $row) {
+                $member = Member::find($row['member_id']);
+                if (! $member) {
+                    continue;
+                }
+
+                // 1. Un-released member's share -> into savings first.
+                $unreleasedShare = round($row['share'] - $row['share_released'], 2);
+                if ($unreleasedShare > 0) {
+                    $ledger->record(
+                        member: $member,
+                        date: $date,
+                        sourceType: 'rebate_release',
+                        txnType: 'deposit',
+                        amount: $unreleasedShare,
+                        remarks: "Member's share for {$year} (annual savings return)",
+                    );
+                }
+
+                // 2. Pay out the full entitlement in cash.
+                $ledger->record(
+                    member: $member,
+                    date: $date,
+                    sourceType: 'savings_return',
+                    txnType: 'withdrawal',
+                    amount: $row['pending'],
+                    remarks: "Annual savings return for {$year} (₱35 savings + ₱7.50 share per ticket)",
+                );
+                $paid++;
+            }
+        });
+
+        return $paid;
+    }
+
+    /**
+     * 6c. Annual Dividend Rebate -- separate from the daily-dues rebate
+     * pool (6a) and the per-liter fuel rebate. Every member gets 50% of
+     * their diesel value for the year returned to them (released each
+     * December). Non-members ARE included -- only benefit *claims* are
+     * member-only. Terminated members are excluded.
+     *
+     *   dividend = (liters for the year * diesel_price_per_liter) / 2
+     *
+     * minus whatever has already been released (savings_ledger rows with
+     * source_type = 'dividend_release') for that year.
+     */
+    public function dividendRebateReport(int $year): array
+    {
+        $dieselPrice = (float) Setting::get('diesel_price_per_liter', 87);
+
+        $liters = FuelConsumption::whereYear('consumption_date', $year)
+            ->select('member_id', DB::raw('SUM(liters) as total_liters'))
+            ->groupBy('member_id')
+            ->pluck('total_liters', 'member_id');
+
+        $released = SavingsLedger::whereYear('date', $year)
+            ->where('source_type', 'dividend_release')
+            ->select('member_id', DB::raw('SUM(amount) as total_released'))
+            ->groupBy('member_id')
+            ->pluck('total_released', 'member_id');
+
+        return Member::query()
+            ->where('status', '!=', 'terminated')
+            ->whereIn('id', $liters->keys())
+            ->orderBy('firstname')
+            ->get()
+            ->map(function (Member $member) use ($liters, $released, $dieselPrice) {
+                $totalLiters = (float) ($liters[$member->id] ?? 0);
+                $dividend = round($totalLiters * $dieselPrice / 2, 2);
+                $releasedAmount = (float) ($released[$member->id] ?? 0);
+
+                return [
+                    'member_id' => $member->id,
+                    'member_name' => $member->full_name,
+                    'total_liters' => $totalLiters,
+                    'diesel_price' => $dieselPrice,
+                    'dividend' => $dividend,
+                    'released' => $releasedAmount,
+                    'pending' => round($dividend - $releasedAmount, 2),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    public function dividendRebateTotalPending(int $year): float
+    {
+        return (float) collect($this->dividendRebateReport($year))->sum('pending');
+    }
+
+    /**
+     * Release the pending annual dividend for the year. Unlike
+     * markRebatePoolReleased(), this goes through SavingsLedgerService so
+     * running_balance and Member::savings_balance stay consistent with
+     * every other ledger writer. Idempotent -- a second run releases 0.
+     *
+     * Returns the number of members credited.
+     */
+    public function markDividendReleased(int $year): int
+    {
+        $pending = collect($this->dividendRebateReport($year))
+            ->filter(fn ($row) => $row['pending'] > 0);
+
+        $ledger = app(SavingsLedgerService::class);
+        $releaseDate = min(Carbon::now(), Carbon::create($year, 12, 31))->toDateString();
+        $updated = 0;
+
+        DB::transaction(function () use ($pending, $year, $ledger, $releaseDate, &$updated) {
+            foreach ($pending as $row) {
+                $member = Member::find($row['member_id']);
+                if (! $member) {
+                    continue;
+                }
+
+                $ledger->record(
+                    member: $member,
+                    date: $releaseDate,
+                    sourceType: 'dividend_release',
+                    txnType: 'deposit',
+                    amount: $row['pending'],
+                    remarks: "Annual dividend rebate for {$year}",
+                );
+                $updated++;
+            }
+        });
+
+        return $updated;
     }
 
     /**
@@ -306,6 +545,44 @@ class LuttodaReportService
                 'category' => $cat,
                 'total' => (float) $g->sum('amount'),
             ])->values(),
+        ];
+    }
+
+    /**
+     * 10b. Collections Income Report -- every income_expenses row of
+     * type 'income' for the period (rental, dispatcher fee, parking fee,
+     * tricab rental, other collections, ...), grouped by category with a
+     * subtotal per category and a grand total. Groups dynamically, so
+     * imported categories show up without a code change.
+     */
+    public function collectionsIncomeReport(string $startDate, string $endDate): array
+    {
+        $records = IncomeExpense::income()
+            ->whereDate('transaction_date', '>=', $startDate)
+            ->whereDate('transaction_date', '<=', $endDate)
+            ->orderBy('transaction_date')
+            ->orderBy('id')
+            ->get();
+
+        $byCategory = $records
+            ->groupBy('category')
+            ->map(fn ($group, $category) => [
+                'category' => $category,
+                'label' => Str::of((string) $category)->replace('_', ' ')->title()->value(),
+                'count' => $group->count(),
+                'total' => (float) $group->sum('amount'),
+            ])
+            ->sortByDesc('total')
+            ->values()
+            ->all();
+
+        return [
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'grand_total' => (float) $records->sum('amount'),
+            'transaction_count' => $records->count(),
+            'by_category' => $byCategory,
+            'transactions' => $records,
         ];
     }
 

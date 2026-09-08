@@ -11,10 +11,16 @@
                 <p class="text-2xl font-semibold text-gray-800">₱{{ number_format($member->savings_balance, 2) }}</p>
                 <p class="text-xs text-gray-400">Current savings balance</p>
             </div>
-            <a href="{{ route('reports.member.export', $member) }}"
-               class="px-4 py-2 bg-slate-800 text-white rounded-md text-sm">
-                Export PDF
-            </a>
+            <div class="flex items-center gap-2">
+                <a href="{{ route('reports.member.export', $member) }}"
+                   class="px-4 py-2 bg-slate-800 text-white rounded-md text-sm">
+                    Export Ledger PDF
+                </a>
+                <a href="{{ route('reports.member.statement.pdf', ['member' => $member, 'year' => now()->year]) }}"
+                   class="px-4 py-2 border border-slate-300 text-slate-700 rounded-md text-sm hover:bg-slate-50">
+                    Statement (PDF)
+                </a>
+            </div>
         </div>
 
         <div class="bg-white shadow-sm rounded-lg overflow-hidden">

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LUTTODA System</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>[x-cloak]{display:none!important}</style>
 </head>
 <body class="bg-gray-100 font-sans leading-normal tracking-normal">
     <div class="flex flex-col md:flex-row min-h-screen">
@@ -29,13 +30,16 @@
                     <a href="{{ route('reports.daily') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.daily') ? 'bg-slate-900 font-semibold' : '' }}">Daily</a>
                     <a href="{{ route('reports.monthly') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.monthly') ? 'bg-slate-900 font-semibold' : '' }}">Monthly</a>
                     <a href="{{ route('reports.fuel') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.fuel') ? 'bg-slate-900 font-semibold' : '' }}">Fuel Consumption</a>
+                    <a href="{{ route('reports.collections-income.page') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.collections-income.page') ? 'bg-slate-900 font-semibold' : '' }}">Collections Income</a>
 
                     {{-- Ledger reports: per-account / per-member money tracking, grouped in a collapsible submenu --}}
                     @php
                         $ledgerActive = request()->routeIs('reports.ledger.search')
                             || request()->routeIs('reports.member')
                             || request()->routeIs('reports.member.export')
+                            || request()->routeIs('reports.savings-return.page')
                             || request()->routeIs('reports.rebate-pool.page')
+                            || request()->routeIs('reports.dividend-rebate.page')
                             || request()->routeIs('reports.association-fund.page')
                             || request()->routeIs('reports.coop-deposit.page');
                     @endphp
@@ -49,13 +53,17 @@
                         </button>
                         <div x-show="open" x-collapse class="pl-4 border-l border-slate-700 ml-4 mt-1 space-y-1">
                             <a href="{{ route('reports.ledger.search') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.ledger.search') || request()->routeIs('reports.member') || request()->routeIs('reports.member.export') ? 'bg-slate-900 font-semibold' : '' }}">Savings Ledger</a>
+                            <a href="{{ route('reports.savings-return.page') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.savings-return.page') ? 'bg-slate-900 font-semibold' : '' }}">Savings Return</a>
                             <a href="{{ route('reports.rebate-pool.page') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.rebate-pool.page') ? 'bg-slate-900 font-semibold' : '' }}">Rebate Pool</a>
+                            <a href="{{ route('reports.dividend-rebate.page') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.dividend-rebate.page') ? 'bg-slate-900 font-semibold' : '' }}">Dividend Rebate</a>
                             <a href="{{ route('reports.association-fund.page') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.association-fund.page') ? 'bg-slate-900 font-semibold' : '' }}">Association Fund</a>
                             <a href="{{ route('reports.coop-deposit.page') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.coop-deposit.page') ? 'bg-slate-900 font-semibold' : '' }}">Coop Deposit</a>
                         </div>
                     </div>
 
                     <div class="pt-4 border-t border-slate-700 text-xs px-4 text-slate-400 uppercase tracking-wider">Settings</div>
+                    <a href="{{ route('settings.index') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('settings.*') ? 'bg-slate-900 font-semibold' : '' }}">Settings</a>
+                    <a href="{{ route('import.index') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('import.*') ? 'bg-slate-900 font-semibold' : '' }}">Import Data</a>
                     <a href="{{ route('users.index') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('users.*') ? 'bg-slate-900 font-semibold' : '' }}">Users</a>
                     <a href="{{ route('tickets.index') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('tickets.*') ? 'bg-slate-900 font-semibold' : '' }}">Tickets</a>
                 @endrole
@@ -71,12 +79,15 @@
                     <a href="{{ route('reports.daily') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.daily') ? 'bg-slate-900 font-semibold' : '' }}">Daily</a>
                     <a href="{{ route('reports.monthly') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.monthly') ? 'bg-slate-900 font-semibold' : '' }}">Monthly</a>
                     <a href="{{ route('reports.fuel') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.fuel') ? 'bg-slate-900 font-semibold' : '' }}">Fuel Consumption</a>
+                    <a href="{{ route('reports.collections-income.page') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.collections-income.page') ? 'bg-slate-900 font-semibold' : '' }}">Collections Income</a>
 
                     @php
                         $ledgerActiveAcct = request()->routeIs('reports.ledger.search')
                             || request()->routeIs('reports.member')
                             || request()->routeIs('reports.member.export')
+                            || request()->routeIs('reports.savings-return.page')
                             || request()->routeIs('reports.rebate-pool.page')
+                            || request()->routeIs('reports.dividend-rebate.page')
                             || request()->routeIs('reports.association-fund.page')
                             || request()->routeIs('reports.coop-deposit.page');
                     @endphp
@@ -90,7 +101,9 @@
                         </button>
                         <div x-show="open" x-collapse class="pl-4 border-l border-slate-700 ml-4 mt-1 space-y-1">
                             <a href="{{ route('reports.ledger.search') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.ledger.search') || request()->routeIs('reports.member') || request()->routeIs('reports.member.export') ? 'bg-slate-900 font-semibold' : '' }}">Savings Ledger</a>
+                            <a href="{{ route('reports.savings-return.page') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.savings-return.page') ? 'bg-slate-900 font-semibold' : '' }}">Savings Return</a>
                             <a href="{{ route('reports.rebate-pool.page') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.rebate-pool.page') ? 'bg-slate-900 font-semibold' : '' }}">Rebate Pool</a>
+                            <a href="{{ route('reports.dividend-rebate.page') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.dividend-rebate.page') ? 'bg-slate-900 font-semibold' : '' }}">Dividend Rebate</a>
                             <a href="{{ route('reports.association-fund.page') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.association-fund.page') ? 'bg-slate-900 font-semibold' : '' }}">Association Fund</a>
                             <a href="{{ route('reports.coop-deposit.page') }}" class="block py-2 px-4 text-sm rounded transition duration-200 hover:bg-slate-700 {{ request()->routeIs('reports.coop-deposit.page') ? 'bg-slate-900 font-semibold' : '' }}">Coop Deposit</a>
                         </div>

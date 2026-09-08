@@ -2,35 +2,37 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\DailyDueException;
 use App\Models\DailyDue;
 use App\Models\Member;
 use App\Models\Ticket;
-use App\Services\SavingsLedgerService;
+use App\Services\DailyDueService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class DailyDuesController extends Controller
 {
-    /**
-     * Price per single ticket. Kept in one place so the total
-     * (and the per-ticket savings/rebate/assoc split) always agree
-     * with what the form shows.
-     */
-    private const PRICE_PER_TICKET = 50.00;
-
-    // Split of PRICE_PER_TICKET, per the LUTTODA dues structure:
-    // ₱50 -> ₱35 savings + ₱7.50 rebate pool + ₱7.50 association fund
-    private const SAVINGS_SHARE_PER_TICKET = 35.00;
-    private const REBATE_SHARE_PER_TICKET = 7.50;
-    private const ASSOCIATION_SHARE_PER_TICKET = 7.50;
+    public function __construct(private DailyDueService $dailyDues) {}
 
     public function index(Request $request)
     {
-        $date = $request->get('date', today()->toDateString());
+        $date = $request->get('date');
 
-        $dues = DailyDue::with('member')
+        // No date picked: show today, but if today has nothing yet fall back
+        // to the most recent day that does (e.g. right after importing a
+        // back-dated collection sheet) so the list isn't mysteriously empty.
+        if (! $date) {
+            $date = today()->toDateString();
+            if (! DailyDue::onDate($date)->exists()) {
+                $date = DailyDue::max('collection_date')
+                    ? \Illuminate\Support\Carbon::parse(DailyDue::max('collection_date'))->toDateString()
+                    : $date;
+            }
+        }
+
+        $dues = DailyDue::with(['member', 'collector'])
             ->onDate($date)
-            ->when($request->route, fn($q) => $q->where('route', $request->route))
+            ->when($request->route, fn ($q) => $q->where('route', $request->route))
             ->latest()
             ->paginate(30);
 
@@ -62,9 +64,9 @@ class DailyDuesController extends Controller
         $ticket = Ticket::where('status', 'available')
             ->where(function ($q) use ($route) {
                 $q->where('route', $route)
-                  ->orWhereNull('route');
+                    ->orWhereNull('route');
             })
-            ->orderByRaw("route = ? DESC", [$route])
+            ->orderByRaw('route = ? DESC', [$route])
             ->orderBy('ticket_number')
             ->first();
 
@@ -78,118 +80,31 @@ class DailyDuesController extends Controller
             'collection_date' => 'required|date',
             'route' => 'required|in:Carmen,Cogon',
             'ticket_quantity' => 'required|integer|min:1|max:100',
+            'alkansiya' => 'nullable|numeric|min:0',
             'remarks' => 'nullable|string',
         ]);
 
-        $exists = DailyDue::where('member_id', $validated['member_id'])
-            ->where('collection_date', $validated['collection_date'])
-            ->exists();
-
-        if ($exists) {
-            return back()->withErrors([
-                'member_id' => 'A due has already been recorded for this member today.',
-            ])->withInput();
-        }
-
-        $quantity = (int) $validated['ticket_quantity'];
-
         try {
-            $result = DB::transaction(function () use ($validated, $quantity) {
-                // Auto-assign the lowest-numbered available tickets that
-                // match this route, or route-agnostic tickets (route is
-                // null) if not enough match. lockForUpdate prevents two
-                // concurrent submissions from grabbing the same tickets.
-                $tickets = Ticket::where('status', 'available')
-                    ->where(function ($q) use ($validated) {
-                        $q->where('route', $validated['route'])
-                          ->orWhereNull('route');
-                    })
-                    ->orderByRaw("route = ? DESC", [$validated['route']])
-                    ->orderBy('ticket_number')
-                    ->lockForUpdate()
-                    ->limit($quantity)
-                    ->get();
-
-                if ($tickets->count() < $quantity) {
-                    throw new \RuntimeException('NO_TICKETS_AVAILABLE');
-                }
-
-                $totalAmount = self::PRICE_PER_TICKET * $quantity;
-
-                $dailyDue = DailyDue::create([
-                    'member_id' => $validated['member_id'],
-                    'collection_date' => $validated['collection_date'],
-                    'route' => $validated['route'],
-                    'remarks' => $validated['remarks'] ?? null,
-                    'amount_paid' => $totalAmount,
-                    // NEW: split computation. Report queries (ReportController@daily,
-                    // and the SQL "Daily Collection Report") assume these columns
-                    // exist and are populated -- they were not being set before.
-                    'savings_share' => self::SAVINGS_SHARE_PER_TICKET * $quantity,
-                    'rebate_share' => self::REBATE_SHARE_PER_TICKET * $quantity,
-                    'association_share' => self::ASSOCIATION_SHARE_PER_TICKET * $quantity,
-                    'ticket_quantity' => $quantity,
-                    'collected_by' => auth()->id(),
-                ]);
-
-                // Claim every locked ticket for this due.
-                foreach ($tickets as $ticket) {
-                    $ticket->update([
-                        'status' => 'used',
-                        'daily_due_id' => $dailyDue->id,
-                        'used_on' => $validated['collection_date'],
-                    ]);
-                }
-
-                // Sync the first ticket_number back onto the daily_dues row
-                // so it still displays directly in listings/tables without
-                // needing to join through the tickets relation.
-                $dailyDue->update(['ticket_number' => $tickets->first()->ticket_number]);
-
-                // NEW: write the savings portion to the ledger so
-                // running_balance stays accurate and auditable.
-                // NOTE: if DailyDue already has a model event/observer that
-                // adjusts Member::savings_balance directly (see destroy()
-                // comment below), that observer and this ledger entry are
-                // now TWO sources of truth for the same money. They need to
-                // be reconciled -- either point the observer at this ledger
-                // service too, or drop the observer and derive
-                // savings_balance from the ledger's latest running_balance.
-                app(SavingsLedgerService::class)->record(
-                    member: $dailyDue->member,
-                    date: $dailyDue->collection_date,
-                    sourceType: 'daily_dues',
-                    txnType: 'deposit',
-                    amount: $dailyDue->savings_share,
-                    sourceable: $dailyDue,
-                    remarks: "Daily due - {$dailyDue->route} (Ticket {$tickets->first()->ticket_number})",
-                );
-
-                // Capture ticket numbers here, inside the transaction,
-                // instead of relying on a $dailyDue->tickets relation
-                // lookup afterward.
-                return [
-                    'dailyDue' => $dailyDue,
-                    'ticketNumbers' => $tickets->pluck('ticket_number')->all(),
-                ];
-            });
-        } catch (\RuntimeException $e) {
-            if ($e->getMessage() === 'NO_TICKETS_AVAILABLE') {
-                return back()->withErrors([
-                    'route' => 'Not enough available tickets left for this route. Please add a new ticket booklet first.',
-                ])->withInput();
-            }
-
-            throw $e;
+            $result = $this->dailyDues->recordWithAutoTickets([
+                'member_id' => (int) $validated['member_id'],
+                'collection_date' => $validated['collection_date'],
+                'route' => $validated['route'],
+                'ticket_quantity' => (int) $validated['ticket_quantity'],
+                'alkansiya' => isset($validated['alkansiya']) ? (float) $validated['alkansiya'] : null,
+                'remarks' => $validated['remarks'] ?? null,
+                'collected_by' => auth()->id(),
+            ]);
+        } catch (DailyDueException $e) {
+            return back()->withErrors(['member_id' => $e->getMessage()])->withInput();
         }
 
-        $ticketNumbers = $result['ticketNumbers'];
+        $ticketNumbers = $result['ticket_numbers'];
         $ticketLabel = count($ticketNumbers) > 1
-            ? ('#' . $ticketNumbers[0] . ' to #' . end($ticketNumbers))
-            : ('#' . $ticketNumbers[0]);
+            ? ('#'.$ticketNumbers[0].' to #'.end($ticketNumbers))
+            : ('#'.$ticketNumbers[0]);
 
         return redirect()->route('daily-dues.index')
-            ->with('success', 'Collection recorded successfully. Ticket ' . $ticketLabel . ' assigned.');
+            ->with('success', 'Collection recorded successfully. Ticket '.$ticketLabel.' assigned.');
     }
 
     public function show(DailyDue $dailyDue)
@@ -200,6 +115,7 @@ class DailyDuesController extends Controller
     public function edit(DailyDue $dailyDue)
     {
         $availableTickets = Ticket::available()->orderBy('ticket_number')->get();
+
         return view('daily-dues.edit', compact('dailyDue', 'availableTickets'));
     }
 
@@ -234,13 +150,13 @@ class DailyDuesController extends Controller
                     }
 
                     // Lock and claim the new ticket
-                    if (!empty($newTicketNumber)) {
+                    if (! empty($newTicketNumber)) {
                         $newTicket = Ticket::where('ticket_number', $newTicketNumber)
                             ->where('status', 'available')
                             ->lockForUpdate()
                             ->first();
 
-                        if (!$newTicket) {
+                        if (! $newTicket) {
                             throw new \RuntimeException('TICKET_TAKEN');
                         }
 
@@ -273,29 +189,7 @@ class DailyDuesController extends Controller
 
     public function destroy(DailyDue $dailyDue)
     {
-        DB::transaction(function () use ($dailyDue) {
-            // Release every ticket linked to this due back to available
-            // before deleting the record.
-            Ticket::where('daily_due_id', $dailyDue->id)->update([
-                'status' => 'available',
-                'daily_due_id' => null,
-            ]);
-
-            // Reverse the savings deposit this due generated in store()
-            // before removing the record, so savings_ledger stays an
-            // accurate audit trail and running_balance / savings_balance
-            // don't drift.
-            app(SavingsLedgerService::class)->record(
-                member: $dailyDue->member,
-                date: today()->toDateString(),
-                sourceType: 'adjustment',
-                txnType: 'withdrawal',
-                amount: $dailyDue->savings_share,
-                remarks: "Reversal - deleted daily due #{$dailyDue->id} ({$dailyDue->route}, {$dailyDue->collection_date->toDateString()})",
-            );
-
-            $dailyDue->delete();
-        });
+        $this->dailyDues->reverse($dailyDue);
 
         return redirect()->route('daily-dues.index')
             ->with('success', 'Record deleted successfully.');

@@ -17,14 +17,17 @@
         @if ($query)
             <div class="bg-white shadow-sm rounded-lg overflow-hidden divide-y divide-gray-100">
                 @forelse ($members as $member)
-                    <a href="{{ route('reports.member', $member) }}"
-                       class="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
-                        <div>
+                    <div class="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
+                        <a href="{{ route('reports.member', $member) }}" class="flex-1">
                             <p class="font-medium text-gray-800">{{ $member->full_name }}</p>
                             <p class="text-sm text-gray-500">{{ $member->member_no }} — {{ $member->route }}</p>
+                        </a>
+                        <div class="flex items-center gap-4">
+                            <span class="text-sm text-gray-600">₱{{ number_format($member->savings_balance, 2) }}</span>
+                            <a href="{{ route('reports.member.statement.pdf', ['member' => $member, 'year' => now()->year]) }}"
+                               class="text-sm text-blue-600 hover:underline">Statement PDF</a>
                         </div>
-                        <span class="text-sm text-gray-600">₱{{ number_format($member->savings_balance, 2) }}</span>
-                    </a>
+                    </div>
                 @empty
                     <p class="px-4 py-6 text-center text-gray-500">No members matched "{{ $query }}".</p>
                 @endforelse

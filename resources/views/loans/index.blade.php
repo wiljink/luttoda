@@ -46,6 +46,7 @@
         <thead class="bg-gray-50">
             <tr>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Member</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Type</th>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Loan Date</th>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Amount</th>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Balance</th>
@@ -60,8 +61,18 @@
                         {{ $loan->member->firstname }} {{ $loan->member->lastname }}
                         <div class="text-xs text-gray-400">{{ $loan->member->member_no }}</div>
                     </td>
+                    <td class="px-4 py-3 text-sm">
+                        <span class="px-2 py-1 rounded-full text-xs font-semibold {{ $loan->isDiesel() ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600' }}">
+                            {{ $loan->isDiesel() ? 'Diesel' : 'Cash' }}
+                        </span>
+                    </td>
                     <td class="px-4 py-3 text-sm text-gray-600">{{ \Illuminate\Support\Carbon::parse($loan->loan_date)->format('M d, Y') }}</td>
-                    <td class="px-4 py-3 text-sm font-semibold text-gray-800">₱{{ number_format($loan->amount, 2) }}</td>
+                    <td class="px-4 py-3 text-sm font-semibold text-gray-800">
+                        ₱{{ number_format($loan->amount, 2) }}
+                        @if ($loan->isDiesel() && $loan->liters_basis)
+                            <span class="block text-xs font-normal text-gray-400">{{ rtrim(rtrim(number_format($loan->liters_basis, 2), '0'), '.') }} L</span>
+                        @endif
+                    </td>
                     <td class="px-4 py-3 text-sm text-gray-600">₱{{ number_format($loan->balance, 2) }}</td>
                     <td class="px-4 py-3 text-sm">
                         @php
@@ -76,6 +87,9 @@
                         <span class="px-2 py-1 rounded-full text-xs font-semibold {{ $statusColors[$loan->status] ?? 'bg-gray-100 text-gray-700' }}">
                             {{ ucfirst($loan->status) }}
                         </span>
+                        @if ($loan->schedules->contains('status', 'overdue'))
+                            <span class="ml-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">Overdue</span>
+                        @endif
                     </td>
                     <td class="px-4 py-3 text-right text-sm space-x-2">
                         <a href="{{ route('loans.show', $loan) }}" class="text-blue-600 hover:underline">View</a>
@@ -90,7 +104,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="6" class="px-4 py-6 text-center text-sm text-gray-400">No loans found.</td>
+                    <td colspan="7" class="px-4 py-6 text-center text-sm text-gray-400">No loans found.</td>
                 </tr>
             @endforelse
         </tbody>

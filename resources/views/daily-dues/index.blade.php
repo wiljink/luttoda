@@ -37,7 +37,12 @@
 </div>
 
 <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6 flex items-center justify-between">
-    <span class="text-gray-600 font-medium">Total Collected on {{ \Illuminate\Support\Carbon::parse($date)->format('M d, Y') }}</span>
+    <span class="text-gray-600 font-medium">
+        Total Collected on {{ \Illuminate\Support\Carbon::parse($date)->format('M d, Y') }}
+        @unless (\Illuminate\Support\Carbon::parse($date)->isToday())
+            <span class="ml-2 text-xs text-amber-600">(most recent day with collections — not today)</span>
+        @endunless
+    </span>
     <span class="text-2xl font-bold text-green-600">₱{{ number_format($totalToday, 2) }}</span>
 </div>
 
@@ -63,7 +68,7 @@
                     <td class="px-4 py-3 text-sm text-gray-600">{{ $due->route }}</td>
                     <td class="px-4 py-3 text-sm text-gray-600">{{ $due->ticket_number ?: '—' }}</td>
                     <td class="px-4 py-3 text-sm font-semibold text-gray-800">₱{{ number_format($due->amount_paid, 2) }}</td>
-                    <td class="px-4 py-3 text-sm text-gray-600">{{ $due->collectedBy->name ?? '—' }}</td>
+                    <td class="px-4 py-3 text-sm text-gray-600">{{ $due->collector->name ?? '—' }}</td>
                     <td class="px-4 py-3 text-right text-sm space-x-2">
                         <a href="{{ route('daily-dues.show', $due) }}" class="text-blue-600 hover:underline">View</a>
                         <a href="{{ route('daily-dues.edit', $due) }}" class="text-amber-600 hover:underline">Edit</a>

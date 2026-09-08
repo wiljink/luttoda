@@ -18,12 +18,17 @@ class DailyDue extends Model
     ];
 
     /**
-     * Per-ticket rates. Multiplied by ticket_quantity below so a
+     * Per-ticket rate fallbacks. The live values come from Settings
+     * (keys dues_savings_per_ticket / dues_rebate_per_ticket /
+     * dues_association_per_ticket); these consts are used only when a
+     * setting row is missing. Multiplied by ticket_quantity below so a
      * multi-ticket due keeps the shares (and the member's savings
      * balance) in sync with how many tickets were actually bought.
      */
     private const SAVINGS_PER_TICKET = 35.00;
+
     private const REBATE_PER_TICKET = 7.50;
+
     private const ASSOCIATION_PER_TICKET = 7.50;
 
     protected static function booted()
@@ -32,12 +37,16 @@ class DailyDue extends Model
             $quantity = $due->ticket_quantity ?: 1;
             $due->ticket_quantity = $quantity;
 
-            $due->amount_paid = $due->amount_paid
-                ?? (($quantity) * (self::SAVINGS_PER_TICKET + self::REBATE_PER_TICKET + self::ASSOCIATION_PER_TICKET));
+            $savingsPerTicket = (float) Setting::get('dues_savings_per_ticket', self::SAVINGS_PER_TICKET);
+            $rebatePerTicket = (float) Setting::get('dues_rebate_per_ticket', self::REBATE_PER_TICKET);
+            $associationPerTicket = (float) Setting::get('dues_association_per_ticket', self::ASSOCIATION_PER_TICKET);
 
-            $due->savings_share = self::SAVINGS_PER_TICKET * $quantity;
-            $due->rebate_share = self::REBATE_PER_TICKET * $quantity;
-            $due->association_share = self::ASSOCIATION_PER_TICKET * $quantity;
+            $due->amount_paid = $due->amount_paid
+                ?? ($quantity * ($savingsPerTicket + $rebatePerTicket + $associationPerTicket));
+
+            $due->savings_share = $savingsPerTicket * $quantity;
+            $due->rebate_share = $rebatePerTicket * $quantity;
+            $due->association_share = $associationPerTicket * $quantity;
         });
 
         // Balance updates are NOT handled here. DailyDuesController::store()

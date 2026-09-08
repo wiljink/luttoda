@@ -7,8 +7,8 @@ use Illuminate\Database\Eloquent\Model;
 class IncomeExpense extends Model
 {
     protected $fillable = [
-        'transaction_date', 'type', 'category', 'description',
-        'amount', 'recorded_by',
+        'transaction_date', 'type', 'category', 'description', 'reference_no',
+        'remarks', 'amount', 'recorded_by',
     ];
 
     protected $casts = [

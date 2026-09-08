@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class LoanPayment extends Model
 {
     protected $fillable = [
-        'loan_id', 'payment_date', 'amount', 'received_by',
+        'loan_id', 'payment_date', 'amount', 'or_number', 'payment_method', 'received_by',
     ];
 
     protected $casts = [
@@ -22,5 +22,10 @@ class LoanPayment extends Model
     public function receiver()
     {
         return $this->belongsTo(User::class, 'received_by');
+    }
+
+    public function allocations()
+    {
+        return $this->hasMany(LoanPaymentAllocation::class, 'payment_id');
     }
 }

@@ -23,17 +23,25 @@
         @csrf
         @method('PUT')
 
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-2 gap-4"
+             x-data="fuelAmount({{ (float) $dieselPrice }}, '{{ old('liters', $fuel->liters) }}', '{{ old('amount', $fuel->amount) }}')">
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-1">Liters *</label>
-                <input type="number" step="0.01" min="0.01" name="liters" value="{{ old('liters', $fuel->liters) }}" required class="w-full rounded border-gray-300 p-2 border focus:ring focus:ring-blue-200">
+                <input type="number" step="0.01" min="0.01" name="liters" required
+                       x-model="liters" @input="recompute()"
+                       class="w-full rounded border-gray-300 p-2 border focus:ring focus:ring-blue-200">
                 @error('liters')
                     <p class="text-sm text-red-600 mt-1">{{ $message }}</p>
                 @enderror
             </div>
             <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-1">Amount (₱) *</label>
-                <input type="number" step="0.01" min="0" name="amount" value="{{ old('amount', $fuel->amount) }}" required class="w-full rounded border-gray-300 p-2 border focus:ring focus:ring-blue-200">
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Amount (₱)</label>
+                <input type="number" step="0.01" min="0" name="amount" x-model="amount"
+                       class="w-full rounded border-gray-300 p-2 border focus:ring focus:ring-blue-200">
+                <p class="text-xs text-gray-400 mt-1">
+                    Recomputes as liters &times; <span class="font-medium">₱{{ number_format($dieselPrice, 2) }}</span>/L
+                    when you change liters. Editable.
+                </p>
                 @error('amount')
                     <p class="text-sm text-red-600 mt-1">{{ $message }}</p>
                 @enderror
@@ -56,4 +64,18 @@
         </div>
     </form>
 </div>
+
+<script>
+    function fuelAmount(price, oldLiters, oldAmount) {
+        return {
+            price: price,
+            liters: oldLiters,
+            amount: oldAmount,
+            recompute() {
+                const l = parseFloat(this.liters);
+                this.amount = isNaN(l) ? '' : (l * this.price).toFixed(2);
+            },
+        };
+    }
+</script>
 @endsection

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Member;
+use App\Services\BenefitEligibilityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -11,14 +12,14 @@ class MemberController extends Controller
     public function index(Request $request)
     {
         $members = Member::query()
-            ->when($request->route, fn($q) => $q->where('route', $request->route))
-            ->when($request->status, fn($q) => $q->where('status', $request->status))
+            ->when($request->route, fn ($q) => $q->where('route', $request->route))
+            ->when($request->status, fn ($q) => $q->where('status', $request->status))
             ->when($request->search, function ($q) use ($request) {
                 $q->where(function ($qq) use ($request) {
                     $qq->where('firstname', 'like', "%{$request->search}%")
-                       ->orWhere('lastname', 'like', "%{$request->search}%")
-                       ->orWhere('plate_number', 'like', "%{$request->search}%")
-                       ->orWhere('member_no', 'like', "%{$request->search}%");
+                        ->orWhere('lastname', 'like', "%{$request->search}%")
+                        ->orWhere('plate_number', 'like', "%{$request->search}%")
+                        ->orWhere('member_no', 'like', "%{$request->search}%");
                 });
             })
             ->latest()
@@ -42,6 +43,7 @@ class MemberController extends Controller
             'plate_number' => 'required|string|unique:members,plate_number',
             'operator_name' => 'required|string|max:150',
             'route' => 'required|in:Carmen,Cogon',
+            'category' => 'required|in:member,non-member',
             'contact_number' => 'nullable|string|max:20',
             'address' => 'nullable|string|max:255',
             'date_joined' => 'required|date',
@@ -59,10 +61,14 @@ class MemberController extends Controller
             ->with('success', 'New Member Added.');
     }
 
-    public function show(Member $member)
+    public function show(Member $member, BenefitEligibilityService $eligibility)
     {
-        $member->load(['dailyDues', 'loans.payments', 'benefits', 'fuelConsumptions']);
-        return view('members.show', compact('member'));
+        $member->load(['dailyDues', 'loans.payments', 'benefits.dependent', 'fuelConsumptions', 'dependents', 'alkansiyaContributions']);
+
+        $benefitSummary = $eligibility->summary($member, (int) now()->year);
+        $savingsBreakdown = $member->savingsBreakdown();
+
+        return view('members.show', compact('member', 'benefitSummary', 'savingsBreakdown'));
     }
 
     public function edit(Member $member)
@@ -80,9 +86,11 @@ class MemberController extends Controller
             'plate_number' => "required|string|unique:members,plate_number,{$member->id}",
             'operator_name' => 'required|string|max:150',
             'route' => 'required|in:Carmen,Cogon',
+            'category' => 'required|in:member,non-member',
             'contact_number' => 'nullable|string|max:20',
             'address' => 'nullable|string|max:255',
-            'status' => 'required|in:active,inactive',
+            'status' => 'required|in:active,inactive,suspended,terminated',
+            'suspended_until' => 'nullable|date|required_if:status,suspended',
             'photo' => 'nullable|image|max:2048',
             'remove_photo' => 'nullable|boolean',
         ]);
@@ -99,6 +107,11 @@ class MemberController extends Controller
 
         unset($validated['photo'], $validated['remove_photo']);
 
+        // Keep suspended_until meaningful only while suspended.
+        if (($validated['status'] ?? null) !== 'suspended') {
+            $validated['suspended_until'] = null;
+        }
+
         $member->update($validated);
 
         return redirect()->route('members.index')
@@ -108,6 +121,7 @@ class MemberController extends Controller
     public function destroy(Member $member)
     {
         $member->delete(); // soft delete -- photo file is kept in case the member is restored
+
         return redirect()->route('members.index')
             ->with('success', 'Member Successfully Deleted.');
     }

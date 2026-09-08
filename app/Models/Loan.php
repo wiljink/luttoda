@@ -7,13 +7,14 @@ use Illuminate\Database\Eloquent\Model;
 class Loan extends Model
 {
     protected $fillable = [
-        'member_id', 'amount', 'interest_rate', 'total_payable', 'balance',
-        'loan_date', 'due_date', 'status', 'purpose', 'approved_by',
+        'member_id', 'type', 'amount', 'liters_basis', 'interest_rate', 'term_months', 'penalty_rate',
+        'total_payable', 'balance', 'loan_date', 'due_date', 'status', 'purpose', 'approved_by',
     ];
 
     protected $casts = [
         'loan_date' => 'date',
         'due_date' => 'date',
+        'liters_basis' => 'decimal:2',
     ];
 
     protected static function booted()
@@ -40,8 +41,28 @@ class Loan extends Model
         return $this->hasMany(LoanPayment::class);
     }
 
+    public function schedules()
+    {
+        return $this->hasMany(LoanSchedule::class)->orderBy('installment_no');
+    }
+
+    public function penalties()
+    {
+        return $this->hasMany(LoanPenalty::class);
+    }
+
     public function scopeActive($query)
     {
         return $query->whereIn('status', ['approved', 'active']);
+    }
+
+    public function scopeDiesel($query)
+    {
+        return $query->where('type', 'diesel');
+    }
+
+    public function isDiesel(): bool
+    {
+        return $this->type === 'diesel';
     }
 }
